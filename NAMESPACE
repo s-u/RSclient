@@ -1,0 +1,1 @@
+export(RSassign, RSattach, RSclose, RSconnect, RSdetach, RSeval, RSevalDetach, RSlogin, RSshutdown, Rserve, RSserverEval, RSserverSource)
