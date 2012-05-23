@@ -2,4 +2,4 @@ useDynLib(RSclient)
 # old client
 export(RSassign, RSattach, RSclose, RSconnect, RSdetach, RSeval, RSevalDetach, RSlogin, RSshutdown, RSserverEval, RSserverSource)
 # new client
-export(RS.connect, RS.eval, RS.close)
+export(RS.connect, RS.eval, RS.close, RS.switch, RS.authkey, RS.login)

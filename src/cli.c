@@ -9,33 +9,93 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #include <sys/types.h>
 #ifdef WIN32
 #include <windows.h>
 #include <winsock2.h>
 static int wsock_up = 0;
+#define MAX_RECV 65536
 #else
+#define MAX_RECV (512*1025)
 #define closesocket(C) close(C)
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+/* until we use confgiure we hard-code TLS use for now */
+#define USE_TLS 1
 #endif
 #include <unistd.h>
 #include <sys/time.h>
+
+#ifdef USE_TLS
+#include <openssl/rsa.h>
+#include <openssl/rand.h>
+#include <openssl/ssl.h>
+#endif
 
 #define USE_RINTERNALS
 #include <Rinternals.h>
 
 typedef struct rsconn {
     int s;
+    void *tls;
     unsigned int send_len, send_alloc;
     char *send_buf;
+    int (*send)(struct rsconn *, const void *, int);
+    int (*recv)(struct rsconn *, void *, int);
 } rsconn_t;
 
 #define rsc_ok(X) (((X)->s) != -1)
+
+static int sock_send(rsconn_t *c, const void *buf, int len) {
+    return send(c->s, buf, len, 0);
+}
+
+static int sock_recv(rsconn_t *c, void *buf, int len) {
+    return recv(c->s, buf, len, 0);
+}
+
+#ifdef USE_TLS
+static int tls_send(rsconn_t *c, const void *buf, int len) {
+    return SSL_write((SSL*)c->tls, buf, len);
+}
+
+static int tls_recv(rsconn_t *c, void *buf, int len) {
+    return SSL_read((SSL*)c->tls, buf, len);
+}
+
+static int first_tls = 1;
+
+#include <openssl/err.h>
+
+static void init_tls() {
+    if (first_tls) {
+	SSL_library_init();	
+	SSL_load_error_strings();
+	first_tls = 0;
+    }
+}
+
+static int tls_upgrade(rsconn_t *c) {
+    SSL *ssl;
+    SSL_CTX *ctx;
+    if (first_tls)
+	init_tls();
+    ctx = SSL_CTX_new(SSLv23_client_method());
+    SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
+    c->tls = ssl = SSL_new(ctx);
+    c->send = tls_send;
+    c->recv = tls_recv;
+    SSL_set_fd(ssl, c->s);
+    /* SSL_CTX_free(ctx) // check whether this is safe - it should be since ssl has the reference ... */
+    return SSL_connect(ssl);
+}
+#endif
+
 
 static rsconn_t *rsc_connect(const char *host, int port) {
     rsconn_t *c = (rsconn_t*) malloc(sizeof(rsconn_t));
@@ -52,6 +112,9 @@ static rsconn_t *rsc_connect(const char *host, int port) {
     c->send_alloc = 65536;
     c->send_len = 0;
     c->send_buf = (char*) malloc(c->send_alloc);
+    c->tls = 0;
+    c->send = sock_send;
+    c->recv = sock_recv;
     if (!c->send_buf) { free(c); return 0; }
 #ifdef WIN32
     family = AF_INET;
@@ -121,6 +184,13 @@ static rsconn_t *rsc_connect(const char *host, int port) {
 }
 
 static int rsc_abort(rsconn_t *c, const char *reason) {
+#if USE_TLS
+    long tc = ERR_get_error();
+    if (tc) {
+	char *te = ERR_error_string(tc, 0);
+	if (te) REprintf("TLS error: %s\n", te);
+    }
+#endif
     if (c->s != -1)
 	closesocket(c->s);
     c->s = -1;
@@ -140,7 +210,7 @@ static void rsc_flush(rsconn_t *c) {
 	fprintf(stderr, "\n");
 #endif
 	while (sp < c->send_len &&
-	       (n = send(c->s, c->send_buf + sp, c->send_len - sp, 0)) > 0)
+	       (n = c->send(c, c->send_buf + sp, c->send_len - sp)) > 0)
 	    sp += n;
 	if (sp < c->send_len)
 	    rsc_abort(c, "send error");
@@ -150,10 +220,18 @@ static void rsc_flush(rsconn_t *c) {
 
 static void rsc_close(rsconn_t *c) {
     if (!c) return;
-    if (c->s != -1) {
+    if (c->s != -1)
 	rsc_flush(c);
-	closesocket(c->s);
+#ifdef USE_TLS
+    if (c->tls) {
+	if (SSL_shutdown((SSL*)c->tls) == 0)
+	    SSL_shutdown((SSL*)c->tls);
+	SSL_free((SSL*)c->tls);
+	c->tls = 0;
     }
+#endif
+    if (c->s != -1)
+	closesocket(c->s);
     free(c->send_buf);
     free(c);
 }
@@ -180,7 +258,7 @@ static long rsc_read(rsconn_t *c, void *buf, long needed) {
     if (needed < 0) return rsc_abort(c, "attempt to read negative number of bytes (integer overflow?)");
     if (c->s == -1) return -1;
     while (needed > 0) {
-	int n = recv(c->s, ptr, needed, 0);
+	int n = c->recv(c, ptr, (needed > MAX_RECV) ? MAX_RECV : needed);
 	if (n < 0) return rsc_abort(c, "read error");
 	if (n == 0) return rsc_abort(c, "connection closed by peer");
 #if RC_DEBUG
@@ -202,7 +280,7 @@ static char slurp_buffer[65536];
 static long rsc_slurp(rsconn_t *c, long needed) {
     long len = needed;
     while (needed > 0) {
-	int n = recv(c->s, slurp_buffer, (needed > sizeof(slurp_buffer)) ? sizeof(slurp_buffer) : needed, 0);
+	int n = c->recv(c, slurp_buffer, (needed > sizeof(slurp_buffer)) ? sizeof(slurp_buffer) : needed);
 	if (n < 0) return rsc_abort(c, "read error");
 	if (n == 0) return rsc_abort(c, "connection closed by peer");
 	needed -= n;
@@ -219,8 +297,8 @@ static void rsconn_fin(SEXP what) {
     if (c) rsc_close(c);
 }
 
-SEXP RS_connect(SEXP sHost, SEXP sPort) {
-    int port = asInteger(sPort);
+SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS) {
+    int port = asInteger(sPort), use_tls = (asInteger(useTLS) == 1);
     const char *host;
     char idstr[32];
     rsconn_t *c;
@@ -231,6 +309,10 @@ SEXP RS_connect(SEXP sHost, SEXP sPort) {
 #ifdef WIN32
     if (!port)
 	Rf_error("unix sockets are not supported in Windows");
+#endif
+#ifndef USE_TLS
+    if (use_tls)
+	Rf_error("TLS is not supported in this build - recompile with OpenSSL");
 #endif
     if (sHost == R_NilValue && !port)
 	Rf_error("socket name must be specified in socket mode");
@@ -244,7 +326,12 @@ SEXP RS_connect(SEXP sHost, SEXP sPort) {
     c = rsc_connect(host, port);
     if (!c)
 	Rf_error("cannot connect to %s:%d", host, port);
-
+#ifdef USE_TLS
+    if (use_tls && tls_upgrade(c) != 1) {
+	rsc_close(c);
+	Rf_error("TLS handshake failed");
+    }
+#endif	
     if (rsc_read(c, idstr, 32) != 32) {
 	rsc_close(c);
 	Rf_error("Handshake failed - ID string not received");
@@ -281,6 +368,64 @@ SEXP RS_close(SEXP sc) {
 
 #include "RSprotocol.h"
 
+static const char *rs_status_string(int status) {
+    switch (status) {
+    case 0: return "(status is OK)";
+    case 2: return "R parser: input incomplete";
+    case 3: return "R parser: error in the expression";
+    case 4: return "R parser: EOF reached";
+    case ERR_auth_failed: return "authentication failed";
+    case ERR_conn_broken: return "connection is broken";
+    case ERR_inv_cmd: return "invalid command";
+    case ERR_inv_par: return "invalid command parameter";
+    case ERR_Rerror: return "fatal R-side error";
+    case ERR_IOerror: return "I/O error on the server";
+    case ERR_notOpen: return "I/O operation on a closed file";
+    case ERR_accessDenied: return "access denied";
+    case ERR_unsupportedCmd: return "unsupported command";
+    case ERR_unknownCmd: return "unknown command";
+    case ERR_data_overflow: return "data overflow";
+    case ERR_object_too_big: return "object too big";
+    case ERR_out_of_mem: return "out of memory";
+    case ERR_ctrl_closed: return "no control line present";
+    case ERR_session_busy: return "session is busy";
+    case ERR_detach_failed: return "unable to detach session";
+    case ERR_disabled: return "feature is disabled";
+    case ERR_unavailable: return "feature is not available in this build of the server";
+    case ERR_cryptError: return "crypto-system error";
+    case ERR_securityClose: return "connection aboted for security reasons";
+    }
+    return "(unknown error code)";
+}
+
+static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
+    long tl = 0;
+    while (1) {
+	if (rsc_read(c, hdr, sizeof(*hdr)) != sizeof(*hdr)) {
+	    RS_close(sc);
+	    Rf_error("read error - could not obtain response header");
+	}
+#if LONG_MAX > 2147483647
+	tl = hdr->res;
+	tl <<= 32;
+	tl |= hdr->len;
+#else
+	tl = hdr->len;
+#endif
+	if (hdr->cmd & CMD_OOB) {
+	    rsc_slurp(c, hdr->len);
+	    Rf_warning("out of band message - removing from the queue");
+	    continue;
+	}
+	break;
+    }
+    if (hdr->cmd != RESP_OK) {
+	rsc_slurp(c, tl);
+	Rf_error("command failed with status code %d: %s", CMD_STAT(hdr->cmd), rs_status_string(CMD_STAT(hdr->cmd)));
+    }
+    return tl;
+}
+
 SEXP RS_eval(SEXP sc, SEXP what) {
     SEXP res;
     rsconn_t *c;
@@ -299,29 +444,170 @@ SEXP RS_eval(SEXP sc, SEXP what) {
 	rsc_write(c, p, pl) != pl)
 	Rf_error("write error");
     rsc_flush(c);
-    while (1) {
-	if (rsc_read(c, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-	    RS_close(sc);
-	    Rf_error("read error - could not obtain response header");
-	}
-	tl = hdr.res;
-	tl <<= 32;
-	tl |= hdr.len;
-	if (hdr.cmd & CMD_OOB) {
-	    rsc_slurp(c, hdr.len);
-	    Rf_warning("out of band message - removing from the queue");
-	    continue;
-	}
-	break;
-    }
-    if (hdr.cmd != RESP_OK) {
-	rsc_slurp(c, tl);
-	Rf_error("eval failed with status code %d", CMD_STAT(hdr.cmd));
-    }
+    tl = get_hdr(sc, c, &hdr);
     res = allocVector(RAWSXP, tl);
     if (rsc_read(c, RAW(res), tl) != tl) {
 	RS_close(sc);
 	Rf_error("read error reading payload of the eval result");
     }
     return res;
+}
+
+SEXP RS_switch(SEXP sc, SEXP prot) {
+    rsconn_t *c;
+
+    if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
+    c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (TYPEOF(prot) != STRSXP || LENGTH(prot) != 1)
+	Rf_error("invalid protocol specification");
+#ifdef USE_TLS
+    if (!strcmp(CHAR(STRING_ELT(prot, 0)), "TLS")) {
+	struct phdr hdr;
+	int par;
+	long tl;
+	hdr.cmd = CMD_switch;
+	hdr.len = 8;
+	hdr.res = 0;
+	hdr.dof = 0;
+	par = SET_PAR(DT_STRING, 4);
+	rsc_write(c, &hdr, sizeof(hdr));
+	rsc_write(c, &par, sizeof(par));
+	rsc_write(c, "TLS", 4);
+	rsc_flush(c);
+	tl = get_hdr(sc, c, &hdr);
+	if (tl)
+	    rsc_slurp(c, tl);
+	if (tls_upgrade(c) != 1) {
+	    RS_close(sc);
+	    Rf_error("TLS negotitation failed");
+	}
+	return ScalarLogical(TRUE);
+    }
+#endif
+    Rf_error("unsupported protocol");
+    return R_NilValue;
+}
+
+SEXP RS_authkey(SEXP sc, SEXP type) {
+    SEXP res;
+    rsconn_t *c;
+    struct phdr hdr;
+    const char *key_type;
+    int par;
+    long tl;
+
+    if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
+    c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (TYPEOF(type) != STRSXP || LENGTH(type) != 1)
+	Rf_error("invalid key type specification");
+    key_type = CHAR(STRING_ELT(type, 0));
+    
+    hdr.cmd = CMD_keyReq;
+    hdr.len = strlen(key_type) + 5;
+    hdr.dof = 0;
+    hdr.res = 0;
+
+    par = SET_PAR(DT_STRING, strlen(key_type) + 1);
+    rsc_write(c, &hdr, sizeof(hdr));
+    rsc_write(c, &par, sizeof(par));
+    rsc_write(c, key_type, strlen(key_type) + 1);
+    rsc_flush(c);
+    tl = get_hdr(sc, c, &hdr);
+    res = allocVector(RAWSXP, tl);
+    if (rsc_read(c, RAW(res), tl) != tl ) {
+	RS_close(sc);
+	Rf_error("read error loading key payload");
+    }
+    return res;
+}
+
+static unsigned char secauth_buf[65536];
+
+#ifdef USE_TLS
+static int RSA_encrypt(RSA *rsa, const unsigned char *src, unsigned char *dst, int len) {
+    int i = 0, j = 0;
+    while (len > 0) {
+	int blk = (len > RSA_size(rsa) - 42) ? (RSA_size(rsa) - 42) : len;
+	int eb = RSA_public_encrypt(blk, src + i, dst + j, rsa, RSA_PKCS1_OAEP_PADDING);
+	if (eb < blk) return -1;
+	i += blk;
+	j += eb;
+	len -= blk;
+    }
+    return j;
+}
+#endif
+
+SEXP RS_secauth(SEXP sc, SEXP auth, SEXP key) {
+#ifdef USE_TLS
+    rsconn_t *c;
+    struct phdr hdr;
+    unsigned char *r;
+    const unsigned char *ptr;
+    int l, n, on, al, par;
+    long tl;
+    RSA *rsa;
+
+    if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
+    if (TYPEOF(key) != RAWSXP || LENGTH(key) < 16)
+	Rf_error("invalid key");
+    c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (!((TYPEOF(auth) == STRSXP && LENGTH(auth) == 1) || (TYPEOF(auth) == RAWSXP)))
+	Rf_error("invalid auhtentication token");
+    r = (unsigned char*) RAW(key);
+    l = ((int) r[0]) | (((int) r[1]) << 8) | (((int) r[2]) << 16) | (((int) r[3]) << 24);
+    if (l + 8 > LENGTH(key))
+	Rf_error("invalid key");
+    if (l > 17000)
+	Rf_error("authkey is too big for this client");
+    n = ((int) r[l + 4]) | (((int) r[l + 5]) << 8) | (((int) r[l + 6]) << 16) | (((int) r[l + 7]) << 24);
+    /* Rprintf("l = %d, n = %d, sum = %d (length %d)\n", l, n, l + n + 8, LENGTH(key)); */
+    if (l + n + 8 > LENGTH(key)) 
+	Rf_error("invalid key");
+    ptr = r + l + 8;
+    if (first_tls)
+	init_tls();
+    rsa = d2i_RSAPublicKey(0, &ptr, n);
+    if (!rsa)
+	Rf_error("the key has no valid RSA public key: %s", ERR_error_string(ERR_get_error(), 0));
+    memcpy(secauth_buf, r, l + 4);
+    if (TYPEOF(auth) == STRSXP) {
+	const char *ak = translateCharUTF8(STRING_ELT(auth, 0));
+	al = strlen(ak) + 1;
+	if (al > 4096)
+	    Rf_error("too long authentication token");
+	memcpy(secauth_buf + l + 8, ak, al);
+    } else {
+	al = LENGTH(auth);
+	if (al > 4096)
+	    Rf_error("too long authentication token");
+	memcpy(secauth_buf + l + 8, RAW(auth), al);
+    }
+    secauth_buf[l + 4] = al & 255;
+    secauth_buf[l + 5] = (al >> 8) & 255;
+    secauth_buf[l + 6] = (al >> 16) & 255;
+    secauth_buf[l + 7] = (al >> 24) & 255;
+    on = RSA_encrypt(rsa, secauth_buf, secauth_buf + 32768, l + al + 8);
+    if (on < l + al + 8)
+	Rf_error("failed to encrypt authentication packet (%s)", ERR_error_string(ERR_get_error(), 0));
+
+    hdr.cmd = CMD_secLogin;
+    hdr.len = on + 4;
+    hdr.res = 0;
+    hdr.dof = 0;
+    
+    par = SET_PAR(DT_BYTESTREAM, on);
+
+    rsc_write(c, &hdr, sizeof(hdr));
+    rsc_write(c, &par, sizeof(par));
+    rsc_write(c, secauth_buf + 32768, on);
+    rsc_flush(c);
+    tl = get_hdr(sc, c, &hdr);
+    if (tl)
+	rsc_slurp(c, tl);
+    return ScalarLogical(TRUE);
+#else
+    Rf_error("RSA is not supported in this build of the client - recompile with OpenSLL");
+    return R_NilValue;
+#endif
 }
