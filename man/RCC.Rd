@@ -1,0 +1,75 @@
+\name{RCC}
+\title{Functions to talk to an Rserve instance}
+\alias{RS.connect}
+\alias{RS.close}
+\alias{RS.eval}
+\alias{RS.login}
+\alias{RS.switch}
+\alias{RS.authkey}
+%\alias{RSdetach}
+%\alias{RSevalDetach}
+%\alias{RSattach}
+%\alias{RSassign}
+%\alias{RSshutdown}
+%\alias{RSserverEval}
+%\alias{RSserverSource}
+\usage{
+RS.connect(host = NULL, port = 6311L, tls = FALSE)
+RS.login(rsc, user, password, pubkey, authkey)
+RS.eval(rsc, x)
+RS.close(rsc)
+RS.switch(rsc, protocol = "TLS")
+RS.authkey(rsc, type = "rsa-authkey")
+}
+\description{
+  Rserve is a server providing R functionality via sockets. The
+  following functions allow another R session to start new Rserve
+  sessions and evaluate commands.
+}
+\arguments{
+  \item{host}{host to connect to or socket path or \code{NULL} for local host}
+  \item{port}{TCP port to connect to or 0 if unix socket is to be used}
+  \item{tls}{if \code{TRUE} then SSL/TLS encrypted connection is started}
+  \item{rcs}{Rserve connection as obtained from \code{RS.connect}}
+  \item{user}{username for authentication (mandatory)}
+  \item{password}{password for authentication}
+  \item{pubkey}{public key for authentication}
+  \item{authkey}{authkey (as obtained from \code{RS.authkey}) for secure authentication}
+  \item{x}{expression to evaluate}
+  \item{protocol}{protocol to switch to (string)}
+  \item{type}{type of the authentication to perform (string)}
+}
+\details{
+  \code{RS.connect} creates a connection to a Rserve. The returned handle
+  is to be used in all subsequent calls to client functions. The session
+  associated witht he connection is alive until closed via
+  \code{RS.close}.
+
+  \code{RS.close} closes the Rserve connection.
+
+  \code{RS.login} performs authentication with the Rserve. The
+  \code{user} entry is mandatory and at least one of \code{password},
+  \code{pubkey} and \code{authkey} must be provided. Typical secure
+  authentication is performed with
+  \code{RS.login(rsc, "username", "password", authkey=RS.authkey())}
+  which ensures that the authentication request is encrypted and cannot
+  be spoofed. When using TLS connections \code{RS.authkey} is not
+  necessary as the connection is already encrypted.
+
+  \code{RS.eval} evaluates the supplied expression remotely.
+  
+  \code{RS.switch} attempts to switch the protocol currently used for
+  communication with Rserve.
+}
+\examples{
+\dontrun{
+  c <- RS.connect()
+  RS.eval(c, data(stackloss))
+  RS.eval(c, library(MASS))
+  RS.eval(c, rlm(stack.loss ~ ., stackloss)$coeff)
+  RS.eval(c, getwd())
+  RS.close(c)
+  }
+}
+\author{Simon Urbanek}
+\keyword{interface}
