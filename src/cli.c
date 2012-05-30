@@ -145,7 +145,6 @@ static rsconn_t *rsc_connect(const char *host, int port) {
 			/* didn't work - try another address (if ther are any) */
 			closesocket(c->s);
 			c->s = -1;
-			break;
 		    }
 		}
 	}
