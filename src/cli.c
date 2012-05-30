@@ -27,6 +27,10 @@ static int wsock_up = 0;
 #include <netdb.h>
 /* until we use confgiure we hard-code TLS use for now */
 #define USE_TLS 1
+/* and we enable IPv6 if we see it */
+#ifdef AF_INET6
+#define USE_IPV6 1
+#endif
 #endif
 #include <unistd.h>
 #include <sys/time.h>
@@ -121,7 +125,34 @@ static rsconn_t *rsc_connect(const char *host, int port) {
 #else
     family = port ? AF_INET : AF_LOCAL;
 #endif
-    c->s = socket(family, SOCK_STREAM, 0);
+#ifdef USE_IPV6
+    /* we use getaddrinfo to have the system figure the family and address for us */
+    /* FIXME: is there any reason we don't use that in general? Do all systems support this? */
+    if (host && family == AF_INET) {
+	struct addrinfo hints, *ail, *ai;
+	char port_s[8];
+	snprintf(port_s, sizeof(port_s), "%d", port);
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = PF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	if (getaddrinfo(host, port_s, &hints, &ail) == 0) {
+	    for (ai = ail; ai; ai = ai->ai_next)
+		if (ai->ai_family == AF_INET || ai->ai_family == AF_INET6) {
+		    c->s = socket(ai->ai_family, SOCK_STREAM, ai->ai_protocol);
+		    if (c->s != -1) {
+			if (connect(c->s, ai->ai_addr, ai->ai_addrlen) == 0)
+			    return c; /* done - connect worked */
+			/* didn't work - try another address (if ther are any) */
+			closesocket(c->s);
+			c->s = -1;
+			break;
+		    }
+		}
+	}
+	c->s = -1;
+    } else
+#endif
+	c->s = socket(family, SOCK_STREAM, 0);
     if (c->s != -1) {
 	if (family == AF_INET) {
 	    struct sockaddr_in sin;
