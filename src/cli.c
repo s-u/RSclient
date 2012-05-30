@@ -129,7 +129,7 @@ static rsconn_t *rsc_connect(const char *host, int port) {
     /* we use getaddrinfo to have the system figure the family and address for us */
     /* FIXME: is there any reason we don't use that in general? Do all systems support this? */
     if (host && family == AF_INET) {
-	struct addrinfo hints, *ail, *ai;
+	struct addrinfo hints, *ail = 0, *ai;
 	char port_s[8];
 	snprintf(port_s, sizeof(port_s), "%d", port);
 	memset(&hints, 0, sizeof(hints));
@@ -140,13 +140,17 @@ static rsconn_t *rsc_connect(const char *host, int port) {
 		if (ai->ai_family == AF_INET || ai->ai_family == AF_INET6) {
 		    c->s = socket(ai->ai_family, SOCK_STREAM, ai->ai_protocol);
 		    if (c->s != -1) {
-			if (connect(c->s, ai->ai_addr, ai->ai_addrlen) == 0)
+			if (connect(c->s, ai->ai_addr, ai->ai_addrlen) == 0) {
+			    freeaddrinfo(ail);
 			    return c; /* done - connect worked */
+			}
 			/* didn't work - try another address (if ther are any) */
 			closesocket(c->s);
 			c->s = -1;
 		    }
 		}
+	    if (ail)
+		freeaddrinfo(ail);
 	}
 	c->s = -1;
     } else
