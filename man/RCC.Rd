@@ -1,5 +1,5 @@
 \name{RCC}
-\title{Functions to talk to an Rserve instance}
+\title{Functions to talk to an Rserve instance (new version)}
 \alias{RS.connect}
 \alias{RS.close}
 \alias{RS.eval}
@@ -26,11 +26,20 @@ RS.authkey(rsc, type = "rsa-authkey")
   following functions allow another R session to start new Rserve
   sessions and evaluate commands.
 }
+\note{
+  The current version of the \code{RSclient} package supplies two
+  clients - one documented in \code{\link{Rclient}} which uses R
+  connections and one documented in \code{\link{RCC}} which uses C code
+  and is far more versatile and efficient. This is the documentation for
+  the latter which is new and supports features that are not supported
+  by R such as unix sockets, SSL/TLS connections, protocol switching and
+  secure authentication.
+}
 \arguments{
   \item{host}{host to connect to or socket path or \code{NULL} for local host}
   \item{port}{TCP port to connect to or 0 if unix socket is to be used}
   \item{tls}{if \code{TRUE} then SSL/TLS encrypted connection is started}
-  \item{rcs}{Rserve connection as obtained from \code{RS.connect}}
+  \item{rsc}{Rserve connection as obtained from \code{RS.connect}}
   \item{user}{username for authentication (mandatory)}
   \item{password}{password for authentication}
   \item{pubkey}{public key for authentication}
