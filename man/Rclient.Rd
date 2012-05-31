@@ -1,5 +1,6 @@
 \name{Rclient}
 \title{Functions to talk to an Rserve}
+\alias{Rclient}
 \alias{RSconnect}
 \alias{RSclose}
 \alias{RSeval}

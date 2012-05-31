@@ -1,5 +1,6 @@
 \name{RCC}
 \title{Functions to talk to an Rserve instance (new version)}
+\alias{RCC}
 \alias{RS.connect}
 \alias{RS.close}
 \alias{RS.eval}
