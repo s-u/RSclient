@@ -34,6 +34,7 @@ static int wsock_up = 0;
 #endif
 #include <unistd.h>
 #include <sys/time.h>
+#include <errno.h>
 
 #ifdef USE_TLS
 #include <openssl/rsa.h>
@@ -45,7 +46,7 @@ static int wsock_up = 0;
 #include <Rinternals.h>
 
 typedef struct rsconn {
-    int s;
+    int s, intr, in_cmd;
     void *tls;
     unsigned int send_len, send_alloc;
     char *send_buf;
@@ -56,11 +57,49 @@ typedef struct rsconn {
 #define rsc_ok(X) (((X)->s) != -1)
 
 static int sock_send(rsconn_t *c, const void *buf, int len) {
+    if (c->s == -1)
+	Rf_error("connection is already closed");
+    if (c->intr) {
+	closesocket(c->s);
+	c->s = -1;
+	Rf_error("previous operation was interrupted, connection aborted");
+    }
     return send(c->s, buf, len, 0);
 }
 
+#if defined EAGAIN && ! defined EWOULDBLOCK
+#define EWOULDBLOCK EAGAIN
+#endif
+#if ! defined EAGAIN && defined EWOULDBLOCK
+#define EAGAIN EWOULDBLOCK 
+#endif
+
 static int sock_recv(rsconn_t *c, void *buf, int len) {
-    return recv(c->s, buf, len, 0);
+    char* cb = (char*) buf;
+    if (c->intr && c->s != -1) {
+	closesocket(c->s);
+	c->s = -1;
+	Rf_error("previous operation was interrupted, connection aborted");
+    }
+    while (len > 0) {
+	int n = recv(c->s, cb, len, 0);
+	/* fprintf(stderr, "sock_recv(%d) = %d [errno=%d]\n", len, n, errno); */
+	/* bail out only on non-timeout errors */
+	if (n == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
+	    return -1;
+	if (n == 0)
+	    break;
+	if (n > 0) {
+	    cb += n;
+	    len -= n;
+	}
+	if (len) {
+	    c->intr = 1;
+	    R_CheckUserInterrupt();
+	    c->intr = 0;
+	}
+    }
+    return (int) (cb - (char*)buf);
 }
 
 #ifdef USE_TLS
@@ -103,7 +142,7 @@ static int tls_upgrade(rsconn_t *c) {
 
 static rsconn_t *rsc_connect(const char *host, int port) {
     rsconn_t *c = (rsconn_t*) malloc(sizeof(rsconn_t));
-    int family;
+    int family, connected = 0;
 #ifdef WIN32
     if (!wsock_up) {
 	 WSADATA dt;
@@ -112,11 +151,13 @@ static rsconn_t *rsc_connect(const char *host, int port) {
 	 wsock_up = 1;
     }
 #endif
+    c->intr = 0;
     c->s = -1;
     c->send_alloc = 65536;
     c->send_len = 0;
     c->send_buf = (char*) malloc(c->send_alloc);
     c->tls = 0;
+    c->in_cmd = 0;
     c->send = sock_send;
     c->recv = sock_recv;
     if (!c->send_buf) { free(c); return 0; }
@@ -140,10 +181,8 @@ static rsconn_t *rsc_connect(const char *host, int port) {
 		if (ai->ai_family == AF_INET || ai->ai_family == AF_INET6) {
 		    c->s = socket(ai->ai_family, SOCK_STREAM, ai->ai_protocol);
 		    if (c->s != -1) {
-			if (connect(c->s, ai->ai_addr, ai->ai_addrlen) == 0) {
-			    freeaddrinfo(ail);
-			    return c; /* done - connect worked */
-			}
+			if (connect(c->s, ai->ai_addr, ai->ai_addrlen) == 0)
+			    break;
 			/* didn't work - try another address (if ther are any) */
 			closesocket(c->s);
 			c->s = -1;
@@ -152,11 +191,20 @@ static rsconn_t *rsc_connect(const char *host, int port) {
 	    if (ail)
 		freeaddrinfo(ail);
 	}
-	c->s = -1;
+	if (c->s != -1) /* the socket will be valid only if connect() succeeded */
+	    connected = 1;
     } else
 #endif
 	c->s = socket(family, SOCK_STREAM, 0);
-    if (c->s != -1) {
+#ifdef SO_RCVTIMEO
+    { /* set receive timeout so we can interrupt read operations */
+	struct timeval tv;
+	tv.tv_sec  = 0;
+	tv.tv_usec = 200000; /* 200ms */
+	setsockopt(c->s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    }
+#endif
+    if (c->s != -1 && !connected) {
 	if (family == AF_INET) {
 	    struct sockaddr_in sin;
 	    struct hostent *haddr;
@@ -233,6 +281,8 @@ static int rsc_abort(rsconn_t *c, const char *reason) {
 }
 
 static void rsc_flush(rsconn_t *c) {
+    if (c->s == -1)
+	Rf_error("connection lost");
     if (c->s != -1 && c->send_len) {
 	int n, sp = 0;
 #if RC_DEBUG
@@ -392,6 +442,7 @@ SEXP RS_close(SEXP sc) {
     rsconn_t *c;
     if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
     c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (!c) return R_NilValue;
     /* we can't use rsc_close because it frees the connection object */
     closesocket(c->s);
     c->s = -1;
@@ -436,6 +487,7 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
     long tl = 0;
     while (1) {
 	if (rsc_read(c, hdr, sizeof(*hdr)) != sizeof(*hdr)) {
+	    c->in_cmd = 0;
 	    RS_close(sc);
 	    Rf_error("read error - could not obtain response header");
 	}
@@ -453,6 +505,7 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 	}
 	break;
     }
+    c->in_cmd = 0;
     if (hdr->cmd != RESP_OK) {
 	rsc_slurp(c, tl);
 	Rf_error("command failed with status code %d: %s", CMD_STAT(hdr->cmd), rs_status_string(CMD_STAT(hdr->cmd)));
@@ -460,7 +513,103 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
     return tl;
 }
 
-SEXP RS_eval(SEXP sc, SEXP what) {
+SEXP RS_eval(SEXP sc, SEXP what, SEXP sWait) {
+    SEXP res;
+    rsconn_t *c;
+    struct phdr hdr;
+    char *p = (char*) RAW(what);
+    int pl = LENGTH(what), async = (asInteger(sWait) == 0);
+    long tl;
+
+    if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
+    c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (!c) Rf_error("invalid NULL connection");
+    if (c->in_cmd) Rf_error("uncollected result from previous command, remove first");
+    hdr.cmd = CMD_serEval;
+    hdr.len = pl;
+    hdr.dof = 0;
+    hdr.res = 0;
+    rsc_write(c, &hdr, sizeof(hdr));
+    rsc_write(c, p, pl);
+    rsc_flush(c);
+    if (async) {
+	c->in_cmd = CMD_serEval;
+	return R_NilValue;
+    }
+    tl = get_hdr(sc, c, &hdr);
+    res = allocVector(RAWSXP, tl);
+    if (rsc_read(c, RAW(res), tl) != tl) {
+	RS_close(sc);
+	Rf_error("read error reading payload of the eval result");
+    }
+    return res;
+}
+
+SEXP RS_collect(SEXP sc, SEXP s_timeout) {
+    double tout = asReal(s_timeout);
+    int maxfd = 0, r;
+    fd_set rset;
+    struct timeval tv;
+    FD_ZERO(&rset);
+    if (TYPEOF(sc) == VECSXP) {
+	int n = LENGTH(sc), i;
+	for (i = 0; i < n; i++) {
+	    SEXP cc = VECTOR_ELT(sc, i);
+	    if (TYPEOF(cc) == EXTPTRSXP && inherits(cc, "RserveConnection")) {
+		rsconn_t *c = (rsconn_t*) EXTPTR_PTR(cc);
+		if (c && (c->in_cmd == CMD_serEval || c->in_cmd == CMD_serEEval) && c->s != -1) {
+		    if (c->s > maxfd) maxfd = c->s;
+		    FD_SET(c->s, &rset);
+		}
+	    }
+	}
+    } else if (TYPEOF(sc) == EXTPTRSXP && inherits(sc, "RserveConnection")) {
+	rsconn_t *c = (rsconn_t*) EXTPTR_PTR(sc);
+	if (c && (c->in_cmd == CMD_serEval || c->in_cmd == CMD_serEEval) && c->s != -1) {
+	    if (c->s > maxfd) maxfd = c->s;
+	    FD_SET(c->s, &rset);
+	}
+    } else Rf_error("invalid input - must be an Rserve connection or a list thereof");
+    if (maxfd == 0) return R_NilValue;
+    if (tout < 0.0 || tout > 35000000.0) tout = 35000000.0; /* roughly a year .. */
+    tv.tv_sec = (int) tout;
+    tv.tv_usec = (tout - (double) tv.tv_sec) * 1000000.0;
+    r = select(maxfd + 1, &rset, 0, 0, &tv);
+    if (r < 1) return R_NilValue; /* FIXME: we don't distinguish between error and timeout ... */
+    {
+	SEXP res;
+	struct phdr hdr;
+	long tl;
+	rsconn_t *c;
+	if (TYPEOF(sc) == EXTPTRSXP) /* there is only one so it must be us */
+	    c = (rsconn_t*) EXTPTR_PTR(sc);
+	else { /* find a connection that is ready */
+	    int n = LENGTH(sc), i;
+	    for (i = 0; i < n; i++) {
+		SEXP cc = VECTOR_ELT(sc, i);
+		if (TYPEOF(cc) == EXTPTRSXP && inherits(cc, "RserveConnection")) {
+		    c = (rsconn_t*) EXTPTR_PTR(cc);
+		    if (c && (c->in_cmd == CMD_serEval || c->in_cmd == CMD_serEEval) && FD_ISSET(c->s, &rset))
+			break;
+		}
+	    }	    
+	    if (i >= n) return R_NilValue;
+	    sc = VECTOR_ELT(sc, i);
+	}
+	/* both sc and c are set to the node and the structure */
+	tl = get_hdr(sc, c, &hdr);
+	res = PROTECT(allocVector(RAWSXP, tl));
+	setAttrib(res, install("rsc"), sc);
+	if (rsc_read(c, RAW(res), tl) != tl) {
+	    RS_close(sc);
+	    Rf_error("read error reading payload of the eval result");
+	}
+	UNPROTECT(1);
+	return res;
+    }
+}
+
+SEXP RS_assign(SEXP sc, SEXP what) {
     SEXP res;
     rsconn_t *c;
     struct phdr hdr;
@@ -470,13 +619,14 @@ SEXP RS_eval(SEXP sc, SEXP what) {
 
     if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
     c = (rsconn_t*) EXTPTR_PTR(sc);
-    hdr.cmd = CMD_serEval;
+    if (!c) Rf_error("invalid NULL connection");
+    if (c->in_cmd) Rf_error("uncollected result from previous command, remove first");
+    hdr.cmd = CMD_serAssign;
     hdr.len = pl;
     hdr.dof = 0;
     hdr.res = 0;
-    if (rsc_write(c, &hdr, sizeof(hdr)) != sizeof(hdr) ||
-	rsc_write(c, p, pl) != pl)
-	Rf_error("write error");
+    rsc_write(c, &hdr, sizeof(hdr));
+    rsc_write(c, p, pl);
     rsc_flush(c);
     tl = get_hdr(sc, c, &hdr);
     res = allocVector(RAWSXP, tl);
@@ -492,6 +642,8 @@ SEXP RS_switch(SEXP sc, SEXP prot) {
 
     if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
     c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (!c) Rf_error("invalid NULL connection");
+    if (c->in_cmd) Rf_error("uncollected result from previous command, remove first");
     if (TYPEOF(prot) != STRSXP || LENGTH(prot) != 1)
 	Rf_error("invalid protocol specification");
 #ifdef USE_TLS
@@ -532,6 +684,8 @@ SEXP RS_authkey(SEXP sc, SEXP type) {
 
     if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
     c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (!c) Rf_error("invalid NULL connection");
+    if (c->in_cmd) Rf_error("uncollected result from previous command, remove first");
     if (TYPEOF(type) != STRSXP || LENGTH(type) != 1)
 	Rf_error("invalid key type specification");
     key_type = CHAR(STRING_ELT(type, 0));
@@ -586,6 +740,8 @@ SEXP RS_secauth(SEXP sc, SEXP auth, SEXP key) {
     if (TYPEOF(key) != RAWSXP || LENGTH(key) < 16)
 	Rf_error("invalid key");
     c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (!c) Rf_error("invalid NULL connection");
+    if (c->in_cmd) Rf_error("uncollected result from previous command, remove first");
     if (!((TYPEOF(auth) == STRSXP && LENGTH(auth) == 1) || (TYPEOF(auth) == RAWSXP)))
 	Rf_error("invalid auhtentication token");
     r = (unsigned char*) RAW(key);

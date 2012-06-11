@@ -7,18 +7,21 @@
 \alias{RS.login}
 \alias{RS.switch}
 \alias{RS.authkey}
+\alias{RS.collect}
+\alias{RS.assign}
 %\alias{RSdetach}
 %\alias{RSevalDetach}
 %\alias{RSattach}
-%\alias{RSassign}
 %\alias{RSshutdown}
 %\alias{RSserverEval}
 %\alias{RSserverSource}
 \usage{
 RS.connect(host = NULL, port = 6311L, tls = FALSE)
 RS.login(rsc, user, password, pubkey, authkey)
-RS.eval(rsc, x)
+RS.eval(rsc, x, wait = TRUE)
+RS.collect(rsc, timeout = Inf)
 RS.close(rsc)
+RS.assign(rsc, name, value)
 RS.switch(rsc, protocol = "TLS")
 RS.authkey(rsc, type = "rsa-authkey")
 }
@@ -46,6 +49,12 @@ RS.authkey(rsc, type = "rsa-authkey")
   \item{pubkey}{public key for authentication}
   \item{authkey}{authkey (as obtained from \code{RS.authkey}) for secure authentication}
   \item{x}{expression to evaluate}
+  \item{wait}{if \code{TRUE} then the result is delivered synchronously,
+    if \code{FALSE} then \code{NULL} is returned instead and the result
+    can be collected later with \code{RS.collect}}
+  \item{timeout}{timeout (in seconds) to wait before giving up}
+  \item{name}{string, name of the symbol to assign to}
+  \item{value}{value to assign}
   \item{protocol}{protocol to switch to (string)}
   \item{type}{type of the authentication to perform (string)}
 }
@@ -67,6 +76,12 @@ RS.authkey(rsc, type = "rsa-authkey")
   necessary as the connection is already encrypted.
 
   \code{RS.eval} evaluates the supplied expression remotely.
+
+  \code{RS.collect} collects results from \code{RS.eval(..., wait =
+    FALSE)} calls. Note that it this case \code{rsc} can be either one
+  connection or a list of connections.
+
+  \code{RS.assign} assigns a value to the remote global workspace.
   
   \code{RS.switch} attempts to switch the protocol currently used for
   communication with Rserve.
