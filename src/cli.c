@@ -276,6 +276,7 @@ static int rsc_abort(rsconn_t *c, const char *reason) {
     if (c->s != -1)
 	closesocket(c->s);
     c->s = -1;
+    c->in_cmd = 0;
     REprintf("rsc_abort: %s\n", reason);
     return -1;
 }
@@ -446,6 +447,7 @@ SEXP RS_close(SEXP sc) {
     /* we can't use rsc_close because it frees the connection object */
     closesocket(c->s);
     c->s = -1;
+    c->in_cmd = 0;
     return R_NilValue;
 }
 
