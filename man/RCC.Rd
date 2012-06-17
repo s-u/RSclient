@@ -9,6 +9,7 @@
 \alias{RS.authkey}
 \alias{RS.collect}
 \alias{RS.assign}
+\alias{RS.oobCallbacks}
 %\alias{RSdetach}
 %\alias{RSevalDetach}
 %\alias{RSattach}
@@ -24,6 +25,7 @@ RS.close(rsc)
 RS.assign(rsc, name, value)
 RS.switch(rsc, protocol = "TLS")
 RS.authkey(rsc, type = "rsa-authkey")
+RS.oobCallbacks(rsc, send, msg)
 }
 \description{
   Rserve is a server providing R functionality via sockets. The
@@ -57,6 +59,8 @@ RS.authkey(rsc, type = "rsa-authkey")
   \item{value}{value to assign}
   \item{protocol}{protocol to switch to (string)}
   \item{type}{type of the authentication to perform (string)}
+  \item{send}{callback function for \code{OOB_SEND}}
+  \item{msg}{callback function for \code{OOB_MSG}}
 }
 \details{
   \code{RS.connect} creates a connection to a Rserve. The returned handle
@@ -85,6 +89,20 @@ RS.authkey(rsc, type = "rsa-authkey")
   
   \code{RS.switch} attempts to switch the protocol currently used for
   communication with Rserve.
+
+  \code{RS.oobCallbacks} sets or retrieves the callback functions
+  associated with \code{OOB_SEND} and \code{OOB_MSG} out-of-band
+  commands. If neither \code{send} nor \code{msg} is specified then
+  \code{RS.oobCallbacks} simply returns the current callback functions,
+  otherwise it replaces the existing ones. Both functions have the form
+  \code{function(code, payload)} where \code{code} is the OOB sub-code
+  (scalar integer) and \code{payload} is the content passed in the OOB
+  command. For \code{OOB_SEND} the result of the callback is disarded,
+  for \code{OOB_MSG} the result is encoded and sent back to the
+  server. Note that OOB commands in this client are only processed when
+  waiting for the response to another command (typically
+  \code{RS.eval}). OOB commands must be explicitly enabled in the
+  server in order to be used (they are disabled by default).
 }
 \examples{
 \dontrun{

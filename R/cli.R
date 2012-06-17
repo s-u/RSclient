@@ -17,12 +17,12 @@ RS.login <- function(rsc, user, password, pubkey, authkey) {
   .Call("RS_secauth", rsc, paste(c(user, password, ''), collapse="\n"), authkey, PACKAGE="RSclient")
 }
 
-RS.oobCallbacks <- function(c, send, msg) {
-  if (missing(send) && missing(msg)) return(.Call("RS_oob_cb", c, NULL, NULL, TRUE))
+RS.oobCallbacks <- function(rsc, send, msg) {
+  if (missing(send) && missing(msg)) return(.Call("RS_oob_cb", rsc, NULL, NULL, TRUE))
   if (missing(send) || missing(msg)) {
-    l <- .Call("RS_oob_cb", c, NULL, NULL, TRUE, PACKAGE="RSclient")
+    l <- .Call("RS_oob_cb", rsc, NULL, NULL, TRUE, PACKAGE="RSclient")
     if (missing(send)) send <- l$send
     if (missing(msg))  msg <- l$msg
   }
-  invisible(.Call("RS_oob_cb", c, send, msg, FALSE, PACKAGE="RSclient"))  
+  invisible(.Call("RS_oob_cb", rsc, send, msg, FALSE, PACKAGE="RSclient"))  
 }

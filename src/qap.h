@@ -5,6 +5,7 @@
 #define USE_RINTERNALS 1
 #include <Rinternals.h>
 #endif
+#define RSERVE_PKG 1
 
 #include "RSprotocol.h"
 
