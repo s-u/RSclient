@@ -50,6 +50,7 @@ typedef struct rsconn {
     void *tls;
     unsigned int send_len, send_alloc;
     char *send_buf;
+    SEXP oob_send_cb, oob_msg_cb;
     int (*send)(struct rsconn *, const void *, int);
     int (*recv)(struct rsconn *, void *, int);
 } rsconn_t;
@@ -158,6 +159,8 @@ static rsconn_t *rsc_connect(const char *host, int port) {
     c->send_buf = (char*) malloc(c->send_alloc);
     c->tls = 0;
     c->in_cmd = 0;
+    c->oob_send_cb = R_NilValue;
+    c->oob_msg_cb = R_NilValue;
     c->send = sock_send;
     c->recv = sock_recv;
     if (!c->send_buf) { free(c); return 0; }
@@ -485,6 +488,8 @@ static const char *rs_status_string(int status) {
     return "(unknown error code)";
 }
 
+#include "qap.h"
+
 static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
     long tl = 0;
     while (1) {
@@ -501,8 +506,55 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 	tl = hdr->len;
 #endif
 	if (hdr->cmd & CMD_OOB) {
-	    rsc_slurp(c, hdr->len);
-	    Rf_warning("out of band message - removing from the queue");
+	    SEXP res, ee = R_NilValue;
+	    unsigned int *ibuf;
+	    int upc = 0;
+	    PROTECT(res = allocVector(RAWSXP, tl));
+	    if (rsc_read(c, RAW(res), tl) != tl) {
+		c->in_cmd = 0;
+		RS_close(sc);
+		Rf_error("read error in OOB message");
+	    }
+	    ibuf = (unsigned int*) RAW(res);
+	    /* FIXME: we assume that we get encoded SEXP - we should check ... */
+	    ibuf += 1;
+	    res = QAP_decode(&ibuf, &upc);
+
+	    /* FIXME: Rserve has a bug(?) that sets CMD_RESP on OOB commands so we clear it for now ... */
+	    hdr->cmd &= ~CMD_RESP;
+
+	    if (IS_OOB_SEND(hdr->cmd) && c->oob_send_cb)
+		PROTECT(ee = lang3(c->oob_send_cb, ScalarInteger(OOB_USR_CODE(hdr->cmd)), res));
+	    if (IS_OOB_MSG(hdr->cmd) && c->oob_msg_cb)
+		PROTECT(ee = lang3(c->oob_msg_cb, ScalarInteger(OOB_USR_CODE(hdr->cmd)), res));
+	    Rprintf(" - OOB %x %s (%d) %d\n", hdr->cmd, IS_OOB_SEND(hdr->cmd) ? "send" : "other", OOB_USR_CODE(hdr->cmd), (int) tl);
+	    if (ee != R_NilValue) {
+		res = eval(ee, R_GlobalEnv);
+		if (IS_OOB_MSG(hdr->cmd)) {
+		    struct phdr rhdr;
+		    long pl = QAP_getStorageSize(res);
+		    SEXP outv = allocVector(RAWSXP, pl);
+		    int isx = pl > 0x7fffff;
+		    unsigned int *oh = (unsigned int*) RAW(outv);
+		    unsigned int *ot = QAP_storeSEXP(oh + (isx ? 2 : 1), res, pl);
+		    pl = sizeof(int) * (long) (ot - oh);
+		    rhdr.cmd = hdr->cmd | CMD_RESP;
+		    rhdr.len = pl;
+		    rhdr.dof = 0;
+#ifdef __LP64__
+		    rhdr.res = pl >> 32;
+#else
+		    rhdr.res = 0;
+#endif
+		    oh[0] = SET_PAR(DT_SEXP | (isx ? DT_LARGE : 0), pl - (isx ? 8 : 4));
+		    if (isx) oh[1] = (pl - 8) >> 24;
+		    rsc_write(c, &rhdr, sizeof(rhdr));
+		    if (pl) rsc_write(c, RAW(outv), pl);
+		    rsc_flush(c);
+		}
+		UNPROTECT(1);
+	    }
+	    UNPROTECT(upc + 1);
 	    continue;
 	}
 	break;
@@ -802,4 +854,34 @@ SEXP RS_secauth(SEXP sc, SEXP auth, SEXP key) {
     Rf_error("RSA is not supported in this build of the client - recompile with OpenSLL");
     return R_NilValue;
 #endif
+}
+
+SEXP RS_oob_cb(SEXP sc, SEXP send_cb, SEXP msg_cb, SEXP query) {
+    rsconn_t *c;
+    SEXP res;
+    int read_only = (asInteger(query) == 1);
+    if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
+    c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (!c) Rf_error("invalid NULL connection");
+    if (!read_only) {
+	if (send_cb != c->oob_send_cb) {
+	    if (c->oob_send_cb != R_NilValue)
+		R_ReleaseObject(c->oob_send_cb);
+	    c->oob_send_cb = send_cb;
+	    if (send_cb != R_NilValue)
+		R_PreserveObject(send_cb);
+	}
+	if (msg_cb != c->oob_msg_cb) {
+	    if (c->oob_msg_cb != R_NilValue)
+		R_ReleaseObject(c->oob_msg_cb);
+	    c->oob_msg_cb = msg_cb;
+	    if (msg_cb != R_NilValue)
+		R_PreserveObject(msg_cb);
+	}
+    }
+    PROTECT(res = Rf_mkNamed(VECSXP, (const char *[]) { "send", "msg", "" }));
+    SET_VECTOR_ELT(res, 0, send_cb);
+    SET_VECTOR_ELT(res, 1, msg_cb);
+    UNPROTECT(1);
+    return res;    
 }
