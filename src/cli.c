@@ -37,7 +37,9 @@ static int wsock_up = 0;
 #include <sys/time.h>
 #include <errno.h>
 
+#ifdef USE_THREADS
 #include "sbthread.h"
+#endif
 
 #ifdef USE_TLS
 #include <openssl/rsa.h>
@@ -523,6 +525,8 @@ static const char *rs_status_string(int status) {
 
 #include "qap.h"
 
+#ifdef USE_THREADS
+
 /* threaded version - can be run ona separate threads, does not use
    any R API and responds with ERR_unsupportedCmd to OOB commands */
 static long get_hdr_mt(rsconn_t *c, struct phdr *hdr) {
@@ -614,6 +618,7 @@ static long get_hdr_mt(rsconn_t *c, struct phdr *hdr) {
     c->in_cmd = 0;
     return tl;
 }
+#endif
 
 static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
     long tl = 0;
@@ -1012,6 +1017,7 @@ SEXP RS_oob_cb(SEXP sc, SEXP send_cb, SEXP msg_cb, SEXP query) {
 }
 
 /* --- asynchronous API --- */
+#ifdef USE_THREADS
 
 int rsc_handshake(rsconn_t *c) {
     char idstr[32];    
@@ -1089,3 +1095,5 @@ SEXP RS_connect_async(SEXP sHost, SEXP sPort, SEXP useTLS) {
     UNPROTECT(1);
     return res;
 }
+
+#endif
