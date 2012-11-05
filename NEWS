@@ -1,0 +1,16 @@
+0.7-1	(under development)
+   o	add support for asynchronous connections and OOB streaming
+
+
+0.7-0	2012-11-05
+   o	initial CRAN release - the R client is based on Rserve 0.6-8
+	The function names on this old client are in the form RSxxx()
+
+	Included is a new C-based client which uses sockets directly
+	and thus supports features that cannot be supported with an
+ 	R-based client such as TLS/SSL connections, switching,
+	RSA secure authentication, multi-client selection.
+	The function names for the new client are of the form RS.xxx()
+
+	Handles of the two clients are not interchangeable, so you can
+	only use one or the other for one connection.
