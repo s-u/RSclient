@@ -162,7 +162,7 @@ static rsconn_t *rsc_alloc() {
     if (!wsock_up) {
 	 WSADATA dt;
 	 /* initialize WinSock 2.0 (WSAStringToAddress is 2.0 feature) */
-	 WSAStartup(0x0200, &dt);
+	 WSAStartup(MAKEWORD(2,0), &dt);
 	 wsock_up = 1;
     }
 #endif
