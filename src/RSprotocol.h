@@ -114,12 +114,14 @@ struct phdr { /* always 16 bytes */
 				      attached string may describe the error */
 
 #define CMD_OOB  0x20000  /* out-of-band data - i.e. unsolicited messages */
-#define OOB_SEND (CMD_OOB | 0x1000) /* OOB send - unsolicited SEXP sent from the R instance to the client. 12 LSB are reserved for application-specific code */
-#define OOB_MSG  (CMD_OOB | 0x2000) /* OOB message - unsolicited message sent from the R instance to the client requiring a response. 12 LSB are reserved for application-specific code */
+#define OOB_SEND        (CMD_OOB | 0x1000) /* OOB send - unsolicited SEXP sent from the R instance to the client. 12 LSB are reserved for application-specific code */
+#define OOB_MSG         (CMD_OOB | 0x2000) /* OOB message - unsolicited message sent from the R instance to the client requiring a response. 12 LSB are reserved for application-specific code */
+#define OOB_STREAM_READ (CMD_OOB | 0x4000) /* OOB stream read request - server requests streaming data from the client (typically streaming input for computation) */
 
-#define IS_OOB_SEND(X)  (((X) & 0x0ffff000) == OOB_SEND)
-#define IS_OOB_MSG(X)   (((X) & 0x0ffff000) == OOB_MSG)
-#define OOB_USR_CODE(X) ((X) & 0xfff)
+#define IS_OOB_SEND(X)          (((X) & 0x0ffff000) == OOB_SEND)
+#define IS_OOB_MSG(X)           (((X) & 0x0ffff000) == OOB_MSG)
+#define IS_OOB_STREAM_READ(X)   (((X) & 0x0ffff000) == OOB_STREAM_READ)
+#define OOB_USR_CODE(X)         ((X) & 0xfff)
 
 /* stat codes; 0-0x3f are reserved for program specific codes - e.g. for R
    connection they correspond to the stat of Parse command.

@@ -15,6 +15,7 @@
 #ifdef WIN32
 #include <windows.h>
 #include <winsock2.h>
+#define USE_TLS 1
 static int wsock_up = 0;
 #define MAX_RECV 65536
 #else
@@ -36,6 +37,8 @@ static int wsock_up = 0;
 #include <sys/time.h>
 #include <errno.h>
 
+#include "sbthread.h"
+
 #ifdef USE_TLS
 #include <openssl/rsa.h>
 #include <openssl/rand.h>
@@ -45,11 +48,20 @@ static int wsock_up = 0;
 #define USE_RINTERNALS
 #include <Rinternals.h>
 
+/* asynchronous connection status */
+#define ACS_CONNECTING    1
+#define ACS_CONNECTED     2 
+
+#define ACS_IOERR        -1
+#define ACS_HSERR        -2  /* handshake error */
+
 typedef struct rsconn {
-    int s, intr, in_cmd;
+    int s, intr, in_cmd, thread, port;
     void *tls;
     unsigned int send_len, send_alloc;
-    char *send_buf;
+    char *send_buf, *host;
+    FILE *stream;
+    const char *last_error;
     SEXP oob_send_cb, oob_msg_cb;
     int (*send)(struct rsconn *, const void *, int);
     int (*recv)(struct rsconn *, void *, int);
@@ -57,13 +69,15 @@ typedef struct rsconn {
 
 #define rsc_ok(X) (((X)->s) != -1)
 
+#define IOerr(C, X) { C->last_error = X; if ((C)->thread) { (C)->thread = ACS_IOERR; return -1; } else Rf_error(X); }
+
 static int sock_send(rsconn_t *c, const void *buf, int len) {
     if (c->s == -1)
-	Rf_error("connection is already closed");
+	IOerr(c, "connection is already closed");
     if (c->intr) {
 	closesocket(c->s);
 	c->s = -1;
-	Rf_error("previous operation was interrupted, connection aborted");
+	IOerr(c, "previous operation was interrupted, connection aborted");
     }
     return send(c->s, buf, len, 0);
 }
@@ -80,7 +94,7 @@ static int sock_recv(rsconn_t *c, void *buf, int len) {
     if (c->intr && c->s != -1) {
 	closesocket(c->s);
 	c->s = -1;
-	Rf_error("previous operation was interrupted, connection aborted");
+	IOerr(c, "previous operation was interrupted, connection aborted");
     }
     while (len > 0) {
 	int n = recv(c->s, cb, len, 0);
@@ -140,10 +154,10 @@ static int tls_upgrade(rsconn_t *c) {
 }
 #endif
 
-
-static rsconn_t *rsc_connect(const char *host, int port) {
-    rsconn_t *c = (rsconn_t*) malloc(sizeof(rsconn_t));
-    int family, connected = 0;
+/* we split alloc and connect so alloc can be done on the main thread
+   and connect on a separate one */
+static rsconn_t *rsc_alloc() {
+    rsconn_t *c = (rsconn_t*) calloc(sizeof(rsconn_t), 1);
 #ifdef WIN32
     if (!wsock_up) {
 	 WSADATA dt;
@@ -153,6 +167,7 @@ static rsconn_t *rsc_connect(const char *host, int port) {
     }
 #endif
     c->intr = 0;
+    c->thread = 0;
     c->s = -1;
     c->send_alloc = 65536;
     c->send_len = 0;
@@ -164,6 +179,11 @@ static rsconn_t *rsc_connect(const char *host, int port) {
     c->send = sock_send;
     c->recv = sock_recv;
     if (!c->send_buf) { free(c); return 0; }
+    return c;
+}
+
+static rsconn_t *rsc_connect_ex(const char *host, int port, rsconn_t *c) {
+    int family, connected = 0;
 #ifdef WIN32
     family = AF_INET;
 #else
@@ -268,25 +288,35 @@ static rsconn_t *rsc_connect(const char *host, int port) {
     return c;
 }
 
+static rsconn_t *rsc_connect(const char *host, int port) {
+    rsconn_t *c = rsc_alloc();
+    if (!c) return c;
+    return rsc_connect_ex(host, port, c);
+}
+
 static int rsc_abort(rsconn_t *c, const char *reason) {
 #if USE_TLS
-    long tc = ERR_get_error();
-    if (tc) {
-	char *te = ERR_error_string(tc, 0);
-	if (te) REprintf("TLS error: %s\n", te);
+    if (!c->thread) {
+	long tc = ERR_get_error();
+	if (tc) {
+	    char *te = ERR_error_string(tc, 0);
+	    if (te) REprintf("TLS error: %s\n", te);
+	}
     }
 #endif
     if (c->s != -1)
 	closesocket(c->s);
     c->s = -1;
     c->in_cmd = 0;
-    REprintf("rsc_abort: %s\n", reason);
+    c->last_error = reason;
+    if (!c->thread)
+	REprintf("rsc_abort: %s\n", reason);
     return -1;
 }
 
-static void rsc_flush(rsconn_t *c) {
+static int rsc_flush(rsconn_t *c) {
     if (c->s == -1)
-	Rf_error("connection lost");
+	IOerr(c, "connection lost");
     if (c->s != -1 && c->send_len) {
 	int n, sp = 0;
 #if RC_DEBUG
@@ -304,6 +334,7 @@ static void rsc_flush(rsconn_t *c) {
 	    rsc_abort(c, "send error");
     }
     c->send_len = 0;
+    return 0;
 }
 
 static void rsc_close(rsconn_t *c) {
@@ -320,6 +351,8 @@ static void rsc_close(rsconn_t *c) {
 #endif
     if (c->s != -1)
 	closesocket(c->s);
+    if (c->host)
+	free(c->host);
     free(c->send_buf);
     free(c);
 }
@@ -489,6 +522,98 @@ static const char *rs_status_string(int status) {
 }
 
 #include "qap.h"
+
+/* threaded version - can be run ona separate threads, does not use
+   any R API and responds with ERR_unsupportedCmd to OOB commands */
+static long get_hdr_mt(rsconn_t *c, struct phdr *hdr) {
+    long tl = 0;
+    while (1) {
+	if (rsc_read(c, hdr, sizeof(*hdr)) != sizeof(*hdr)) {
+	    c->in_cmd = 0;
+	    closesocket(c->s);
+	    c->s = -1;
+	    IOerr(c, "read error - could not obtain response header");
+	}
+#if LONG_MAX > 2147483647
+	tl = hdr->res;
+	tl <<= 32;
+	tl |= hdr->len;
+#else
+	tl = hdr->len;
+#endif
+	/* OOB is not supported in MT mode */
+	if (hdr->cmd & CMD_OOB) {
+	    struct phdr rhdr;
+	    int err = 0;
+	    memset(&rhdr, 0, sizeof(rhdr));
+
+	    /* FIXME: Rserve has a bug(?) that sets CMD_RESP on OOB commands so we clear it for now ... */
+	    hdr->cmd &= ~CMD_RESP;
+
+	    if (IS_OOB_STREAM_READ(hdr->cmd)) { /* the only request we allow is stream read */
+		if (!c->stream || OOB_USR_CODE(hdr->cmd)) { /* we support only one stream - if present */
+		    rsc_slurp(c, tl);
+		    err = ERR_notOpen;
+		} else if (tl > 16) {
+		    rsc_slurp(c, tl);
+		    err = ERR_inv_par;
+		} else {
+		    /* the request size is limited by the send buffer */
+		    unsigned int req_off = 16 /* msg hdr */ + 4 /* par hdr */;
+		    unsigned int req_size = c->send_alloc - req_off;
+		    if (tl) {
+			unsigned int b[4];
+			int n = c->recv(c, b, tl);
+			if (n < tl) {
+			    c->in_cmd = 0;
+			    rsc_abort(c, "Read error in parsing OOB_STREAM_READ parameters");
+			    return -1;
+			}
+			/* FIXME: we need to fix endianness on bigendian machines - but this is true elewhere! */
+			if (PAR_TYPE(b[0]) != DT_INT || PAR_LEN(b[0]) != sizeof(b[1]) || b[1] == 0)
+			    err = ERR_inv_par;
+			else {
+			    /* we limit the request size */
+			    if (b[1] < req_size) req_size = b[1];
+			    /* flush the send buffer so it's guaranteed empty */
+			    rsc_flush(c);
+			    n = fread(c->send_buf + req_off, 1, req_size, c->stream);
+			    if (n < 0) {
+				err = ERR_IOerror;
+				fclose(c->stream);
+				c->stream = 0;
+			    } else {
+				unsigned int *sb = (unsigned int*) (c->send_buf);
+				sb[0] = OOB_STREAM_READ | RESP_OK;
+				sb[2] = sb[3] = 0;
+				if (n) {
+				    sb[1] = n + 4;
+				    sb[4] = SET_PAR(DT_BYTESTREAM, n);
+				    c->send_len = req_off + n;
+				} else {
+				    sb[1] = 0;
+				    c->send_len = 16; /* jsut the header */
+				}
+				/* we have populated the send buffer by hand, jsut flush it */
+				rsc_flush(c);
+			    }			    
+			}
+		    }
+		}
+	    } else {
+		rsc_slurp(c, tl);
+		err = ERR_unsupportedCmd;
+	    }
+	    if (err) {
+		rhdr.cmd = err | CMD_RESP;
+		rsc_write(c, &rhdr, sizeof(rhdr));
+		rsc_flush(c);
+	    }
+	} else break;
+    }	
+    c->in_cmd = 0;
+    return tl;
+}
 
 static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
     long tl = 0;
@@ -884,4 +1009,83 @@ SEXP RS_oob_cb(SEXP sc, SEXP send_cb, SEXP msg_cb, SEXP query) {
     SET_VECTOR_ELT(res, 1, msg_cb);
     UNPROTECT(1);
     return res;    
+}
+
+/* --- asynchronous API --- */
+
+int rsc_handshake(rsconn_t *c) {
+    char idstr[32];    
+    if (rsc_read(c, idstr, 32) != 32) {
+	if (c->thread) c->thread = ACS_HSERR;
+	rsc_abort(c, "Handshake failed - ID string not received");
+	return -1;
+    }    
+    if (memcmp(idstr, "Rsrv", 4) || memcmp(idstr + 8, "QAP1", 4)) {
+	if (c->thread) c->thread = ACS_HSERR;
+	rsc_abort(c, "Handshake failed - unknown protocol");
+	return -1;
+    }
+    /* supported range 0100 .. 0103 */
+    if (memcmp(idstr + 4, "0100", 4) < 0 || memcmp(idstr + 4, "0103", 4) > 0) {
+	if (c->thread) c->thread = ACS_HSERR;
+	rsc_abort(c, "Handshake failed - server protocol version too high");
+	return -1;
+    }
+    return 0;
+}
+
+static void *rsc_async_thread(void *par) {
+    rsconn_t *c = (rsconn_t*) par;
+    
+    if (!c) return c;
+    c = rsc_connect_ex(c->host, c->port, c);
+    if (!c) return c;
+    if (rsc_handshake(c)) return 0;
+
+    return 0;
+}
+
+SEXP RS_connect_async(SEXP sHost, SEXP sPort, SEXP useTLS) {
+    int port = asInteger(sPort), use_tls = (asInteger(useTLS) == 1);
+    const char *host;
+    rsconn_t *c;
+    SEXP res;
+
+    if (port < 0 || port > 65534)
+	Rf_error("Invalid port number");
+#ifdef WIN32
+    if (!port)
+	Rf_error("unix sockets are not supported in Windows");
+#endif
+#ifndef USE_TLS
+    if (use_tls)
+	Rf_error("TLS is not supported in this build - recompile with OpenSSL");
+#endif
+    if (sHost == R_NilValue && !port)
+	Rf_error("socket name must be specified in socket mode");
+    if (sHost == R_NilValue)
+	host = "127.0.0.1";
+    else {
+	if (TYPEOF(sHost) != STRSXP || LENGTH(sHost) != 1)
+	    Rf_error("host must be a character vector of length one");
+	host = R2UTF8(sHost);
+    }
+    c = rsc_alloc();
+    if (!c)
+	Rf_error("cannot allocate memory");
+
+    c->host = strdup(host);
+    c->port = port;
+    c->thread = ACS_CONNECTING;
+
+    if (sbthread_create(rsc_async_thread, c)) {
+	rsc_close(c);
+	Rf_error("cannot create thread for the connection");
+    }
+
+    res = PROTECT(R_MakeExternalPtr(c, R_NilValue, R_NilValue));
+    setAttrib(res, R_ClassSymbol, mkString("RserveAsyncConnection"));
+    R_RegisterCFinalizer(res, rsconn_fin);
+    UNPROTECT(1);
+    return res;
 }
