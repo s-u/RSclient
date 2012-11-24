@@ -38,8 +38,8 @@ RS.oobCallbacks(rsc, send, msg)
   connections and one documented in \code{\link{RCC}} which uses C code
   and is far more versatile and efficient. This is the documentation for
   the latter which is new and supports features that are not supported
-  by R such as unix sockets, SSL/TLS connections, protocol switching and
-  secure authentication.
+  by R such as unix sockets, SSL/TLS connections, protocol switching,
+  secure authentication and multi-server collection.
 }
 \arguments{
   \item{host}{host to connect to or socket path or \code{NULL} for local host}
@@ -57,10 +57,11 @@ RS.oobCallbacks(rsc, send, msg)
   \item{timeout}{timeout (in seconds) to wait before giving up}
   \item{detail}{if \code{TRUE} then the result payload is returned in a
     list with elements \code{value} (unserialized result value of the
-    command) and \code{rsc} (connection which returned this result)
-    which allows to identify the source of the result and to distinguish
-    timeout from a \code{NULL} value. Otherwise the returned value is
-    just the payload value of theresult.}
+    command - where applciable) and \code{rsc} (connection which
+    returned this result) which allows to identify the source of the
+    result and to distinguish timeout from a \code{NULL}
+    value. Otherwise the returned value is just the payload value of the
+    result.}
   \item{name}{string, name of the symbol to assign to}
   \item{value}{value to assign}
   \item{protocol}{protocol to switch to (string)}
@@ -80,7 +81,7 @@ RS.oobCallbacks(rsc, send, msg)
   \code{user} entry is mandatory and at least one of \code{password},
   \code{pubkey} and \code{authkey} must be provided. Typical secure
   authentication is performed with
-  \code{RS.login(rsc, "username", "password", authkey=RS.authkey())}
+  \code{RS.login(rsc, "username", "password", authkey=RS.authkey(rsc))}
   which ensures that the authentication request is encrypted and cannot
   be spoofed. When using TLS connections \code{RS.authkey} is not
   necessary as the connection is already encrypted.
@@ -94,7 +95,8 @@ RS.oobCallbacks(rsc, send, msg)
   \code{RS.assign} assigns a value to the remote global workspace.
   
   \code{RS.switch} attempts to switch the protocol currently used for
-  communication with Rserve.
+  communication with Rserve. Currently the only supported protocol
+  switch is from plain QAP1 to TLS secured (encrypted) QAP1.
 
   \code{RS.oobCallbacks} sets or retrieves the callback functions
   associated with \code{OOB_SEND} and \code{OOB_MSG} out-of-band
