@@ -4,13 +4,24 @@ RS.close <- function(rsc) .Call("RS_close", rsc)
 
 RS.eval <- function(rsc, x, wait=TRUE) { r <- .Call("RS_eval", rsc, serialize(substitute(x), NULL, FALSE), wait, PACKAGE="RSclient"); if (is.raw(r)) unserialize(r) else r }
 
-RS.collect <- function(rsc, timeout = Inf) { r <- .Call("RS_collect", rsc, timeout, PACKAGE="RSclient"); if (is.raw(r)) unserialize(r) else r }
+RS.collect <- function(rsc, timeout = Inf, detail = FALSE) {
+  r <- .Call("RS_collect", rsc, timeout, PACKAGE="RSclient")
+  if (is.raw(r)) {
+    if (length(r)) {
+      if (isTRUE(detail))
+        list(value = unserialize(r), rsc = attr(r, "rsc"))
+      else unserialize(r)
+    } else if (isTRUE(detail))
+      list(rsc = attr(r, "rsc"))
+    else NULL
+  } else r
+}
 
 RS.switch <- function(rsc, protocol="TLS") .Call("RS_switch", rsc, protocol, PACKAGE="RSclient")
 
 RS.authkey <- function(rsc, type="rsa-authkey") .Call("RS_authkey", rsc, type, PACKAGE="RSclient")
 
-RS.assign <- function(rsc, name, value) .Call("RS_assign", rsc, serialize(list(name, value), NULL), PACKAGE="RSclient")
+RS.assign <- function(rsc, name, value, wait=TRUE) .Call("RS_assign", rsc, serialize(list(name, value), NULL), wait, PACKAGE="RSclient")
 
 RS.login <- function(rsc, user, password, pubkey, authkey) {
   if (missing(user) || missing(password)) stop("user and password must be specified")
@@ -26,3 +37,7 @@ RS.oobCallbacks <- function(rsc, send, msg) {
   }
   invisible(.Call("RS_oob_cb", rsc, send, msg, FALSE, PACKAGE="RSclient"))  
 }
+
+print.RserveConnection <- function(x, ...) invisible(.Call("RS_print", x))
+`==.RserveConnection` <- function(e1, e2) .Call("RS_eq", e1, e2)
+`!=.RserveConnection` <- function(e1, e2) !.Call("RS_eq", e1, e2)

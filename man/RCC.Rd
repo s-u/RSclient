@@ -20,9 +20,9 @@
 RS.connect(host = NULL, port = 6311L, tls = FALSE)
 RS.login(rsc, user, password, pubkey, authkey)
 RS.eval(rsc, x, wait = TRUE)
-RS.collect(rsc, timeout = Inf)
+RS.collect(rsc, timeout = Inf, detail = FALSE)
 RS.close(rsc)
-RS.assign(rsc, name, value)
+RS.assign(rsc, name, value, wait = TRUE)
 RS.switch(rsc, protocol = "TLS")
 RS.authkey(rsc, type = "rsa-authkey")
 RS.oobCallbacks(rsc, send, msg)
@@ -55,6 +55,12 @@ RS.oobCallbacks(rsc, send, msg)
     if \code{FALSE} then \code{NULL} is returned instead and the result
     can be collected later with \code{RS.collect}}
   \item{timeout}{timeout (in seconds) to wait before giving up}
+  \item{detail}{if \code{TRUE} then the result payload is returned in a
+    list with elements \code{value} (unserialized result value of the
+    command) and \code{rsc} (connection which returned this result)
+    which allows to identify the source of the result and to distinguish
+    timeout from a \code{NULL} value. Otherwise the returned value is
+    just the payload value of theresult.}
   \item{name}{string, name of the symbol to assign to}
   \item{value}{value to assign}
   \item{protocol}{protocol to switch to (string)}
@@ -82,7 +88,7 @@ RS.oobCallbacks(rsc, send, msg)
   \code{RS.eval} evaluates the supplied expression remotely.
 
   \code{RS.collect} collects results from \code{RS.eval(..., wait =
-    FALSE)} calls. Note that it this case \code{rsc} can be either one
+    FALSE)} calls. Note that in this case \code{rsc} can be either one
   connection or a list of connections.
 
   \code{RS.assign} assigns a value to the remote global workspace.

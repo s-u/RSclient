@@ -1,6 +1,10 @@
 0.7-1	(under development)
    o	add support for asynchronous connections and OOB streaming
 
+   o	allow queuing of asynchronous RS.eval() and RS.assign()
+
+   o	add basic methods for connections such as print, == and !=
+
 
 0.7-0	2012-11-05
    o	initial CRAN release - the R client is based on Rserve 0.6-8
