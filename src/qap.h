@@ -11,8 +11,12 @@
 
 /* stuff to enulate compatibility with Rserve's use */
 #define DISABLE_ENCODING 1
+#ifndef ptoi
 #define ptoi(X) X
+#endif
+#ifndef itop
 #define itop(X) ptoi(X)
+#endif
 #define fixdcpy(A, B) memcpy(A, B, 8)
 typedef unsigned long rlen_t;
 

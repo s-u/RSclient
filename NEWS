@@ -1,9 +1,13 @@
 0.7-1	(under development)
    o	add support for asynchronous connections and OOB streaming
 
+   o	add support for non-transparent proxy protocol (RSpx)
+
    o	allow queuing of asynchronous RS.eval() and RS.assign()
 
    o	add basic methods for connections such as print, == and !=
+
+   o	allow convenient RS.assign(c, x) syntax
 
 
 0.7-0	2012-11-05

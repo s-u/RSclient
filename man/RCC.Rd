@@ -17,7 +17,7 @@
 %\alias{RSserverEval}
 %\alias{RSserverSource}
 \usage{
-RS.connect(host = NULL, port = 6311L, tls = FALSE)
+RS.connect(host = NULL, port = 6311L, tls = FALSE, proxy.target = NULL)
 RS.login(rsc, user, password, pubkey, authkey)
 RS.eval(rsc, x, wait = TRUE)
 RS.collect(rsc, timeout = Inf, detail = FALSE)
@@ -45,6 +45,11 @@ RS.oobCallbacks(rsc, send, msg)
   \item{host}{host to connect to or socket path or \code{NULL} for local host}
   \item{port}{TCP port to connect to or 0 if unix socket is to be used}
   \item{tls}{if \code{TRUE} then SSL/TLS encrypted connection is started}
+  \item{proxy.target}{proxy target (string) in the form \code{<host>:<port>}
+    to be used when connecting to a non-transparent proxy that requires
+    target designation. Not used when connected to transparent proxies
+    or directly to Rserve instances. Note that literal IPv6 addresses must be
+    quoted in \code{[]}.}
   \item{rsc}{Rserve connection as obtained from \code{RS.connect}}
   \item{user}{username for authentication (mandatory)}
   \item{password}{password for authentication}
@@ -63,7 +68,9 @@ RS.oobCallbacks(rsc, send, msg)
     value. Otherwise the returned value is just the payload value of the
     result.}
   \item{name}{string, name of the symbol to assign to}
-  \item{value}{value to assign}
+  \item{value}{value to assign -- if missing \code{name} is assumed to
+    be a symbol and its evaluated value will be used as value while the
+    symbol name will be used as name}
   \item{protocol}{protocol to switch to (string)}
   \item{type}{type of the authentication to perform (string)}
   \item{send}{callback function for \code{OOB_SEND}}

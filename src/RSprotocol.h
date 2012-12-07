@@ -113,6 +113,12 @@ struct phdr { /* always 16 bytes */
 #define RESP_ERR (CMD_RESP|0x0002) /* command failed, check stats code
 				      attached string may describe the error */
 
+#define CMD_CLASS(X) ((X) & 0xf0000) /* get command class */
+#define CMD_CLASS_RSERVE   0x00000   /* regular Rserve commands */
+#define CMD_CLASS_RESPONSE 0x10000   /* response to Rserve commands */
+#define CMD_CLASS_OOB      0x20000   /* OOB commands */
+#define CMD_CLASS_PROXY    0x40000   /* proxy commands (filtered out by proxies) */
+
 #define CMD_OOB  0x20000  /* out-of-band data - i.e. unsolicited messages */
 #define OOB_SEND        (CMD_OOB | 0x1000) /* OOB send - unsolicited SEXP sent from the R instance to the client. 12 LSB are reserved for application-specific code */
 #define OOB_MSG         (CMD_OOB | 0x2000) /* OOB message - unsolicited message sent from the R instance to the client requiring a response. 12 LSB are reserved for application-specific code */
@@ -122,6 +128,8 @@ struct phdr { /* always 16 bytes */
 #define IS_OOB_MSG(X)           (((X) & 0x0ffff000) == OOB_MSG)
 #define IS_OOB_STREAM_READ(X)   (((X) & 0x0ffff000) == OOB_STREAM_READ)
 #define OOB_USR_CODE(X)         ((X) & 0xfff)
+
+#define CMD_PROXY_TARGET  (CMD_CLASS_PROXY | 0x01) /* payload is NUL-terminted string defining the desired target host:port -- IPv6 addresses must be quoted in [] */
 
 /* stat codes; 0-0x3f are reserved for program specific codes - e.g. for R
    connection they correspond to the stat of Parse command.

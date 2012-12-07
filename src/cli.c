@@ -420,7 +420,14 @@ static void rsconn_fin(SEXP what) {
     if (c) rsc_close(c);
 }
 
-SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS) {
+/* Rserve protocol */
+#include "RSprotocol.h"
+
+/* FIXME: hack for now -- most of this client works only on little-endian machines
+   but there is some feeble effort to fix that -- in the meantime it's just noop */
+#define itop(X) X
+
+SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget) {
     int port = asInteger(sPort), use_tls = (asInteger(useTLS) == 1);
     const char *host;
     char idstr[32];
@@ -459,6 +466,27 @@ SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS) {
 	rsc_close(c);
 	Rf_error("Handshake failed - ID string not received");
     }
+    if (!memcmp(idstr, "RSpx", 4) && !memcmp(idstr + 8, "QAP1", 4)) { /* RSpx proxy protocol */
+	const char *proxy_target;
+	struct phdr hdr;
+	if (TYPEOF(sProxyTarget) != STRSXP || LENGTH(sProxyTarget) < 1) {
+	    rsc_close(c);
+	    Rf_error("Connected to a non-transparent proxy, but no proxy target was specified");
+	}
+	/* send CMD_PROXY_TARGET and re-fetch ID string */
+	proxy_target = CHAR(STRING_ELT(sProxyTarget, 0));
+	hdr.cmd = itop(CMD_PROXY_TARGET);
+	hdr.len = itop(strlen(proxy_target) + 1);
+	hdr.dof = 0;
+	hdr.res = 0;
+	rsc_write(c, &hdr, sizeof(hdr));
+	rsc_write(c, proxy_target, strlen(proxy_target) + 1);
+	rsc_flush(c);
+	if (rsc_read(c, idstr, 32) != 32) {
+	    rsc_close(c);
+	    Rf_error("Handshake failed - ID string not received (after CMD_PROXY_TARGET)");
+	}
+    }
     if (memcmp(idstr, "Rsrv", 4) || memcmp(idstr + 8, "QAP1", 4)) {
 	rsc_close(c);
 	Rf_error("Handshake failed - unknown protocol");
@@ -488,10 +516,6 @@ SEXP RS_close(SEXP sc) {
     c->in_cmd = 0;
     return R_NilValue;
 }
-
-/* Rserve protocol */
-
-#include "RSprotocol.h"
 
 static const char *rs_status_string(int status) {
     switch (status) {

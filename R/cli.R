@@ -1,4 +1,4 @@
-RS.connect <- function(host=NULL, port=6311L, tls=FALSE) .Call("RS_connect", host, port, tls, PACKAGE="RSclient")
+RS.connect <- function(host=NULL, port=6311L, tls=FALSE, proxy.target=NULL) .Call("RS_connect", host, port, tls, proxy.target, PACKAGE="RSclient")
 
 RS.close <- function(rsc) .Call("RS_close", rsc)
 
@@ -21,7 +21,14 @@ RS.switch <- function(rsc, protocol="TLS") .Call("RS_switch", rsc, protocol, PAC
 
 RS.authkey <- function(rsc, type="rsa-authkey") .Call("RS_authkey", rsc, type, PACKAGE="RSclient")
 
-RS.assign <- function(rsc, name, value, wait=TRUE) .Call("RS_assign", rsc, serialize(list(name, value), NULL), wait, PACKAGE="RSclient")
+RS.assign <- function(rsc, name, value, wait = TRUE) {
+  if (missing(value)) {
+    sym.name <- deparse(substitute(name))
+    value <- name
+    name <- sym.name
+  }
+  .Call("RS_assign", rsc, serialize(list(name, value), NULL), wait, PACKAGE="RSclient")
+}
 
 RS.login <- function(rsc, user, password, pubkey, authkey) {
   if (missing(user) || missing(password)) stop("user and password must be specified")
