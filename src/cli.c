@@ -427,8 +427,8 @@ static void rsconn_fin(SEXP what) {
    but there is some feeble effort to fix that -- in the meantime it's just noop */
 #define itop(X) X
 
-SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget) {
-    int port = asInteger(sPort), use_tls = (asInteger(useTLS) == 1);
+SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget, SEXP sProxyWait) {
+    int port = asInteger(sPort), use_tls = (asInteger(useTLS) == 1), px_get_slot = (asInteger(sProxyWait) == 0);
     const char *host;
     char idstr[32];
     rsconn_t *c;
@@ -481,6 +481,11 @@ SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget) {
 	hdr.res = 0;
 	rsc_write(c, &hdr, sizeof(hdr));
 	rsc_write(c, proxy_target, strlen(proxy_target) + 1);
+	if (px_get_slot) { /* send CMD_PROXY_GET_SLOT as well if requested */
+	    hdr.cmd = itop(CMD_PROXY_GET_SLOT);
+	    hdr.len = 0;
+	    rsc_write(c, &hdr, sizeof(hdr));
+	}
 	rsc_flush(c);
 	if (rsc_read(c, idstr, 32) != 32) {
 	    rsc_close(c);

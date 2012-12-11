@@ -17,7 +17,8 @@
 %\alias{RSserverEval}
 %\alias{RSserverSource}
 \usage{
-RS.connect(host = NULL, port = 6311L, tls = FALSE, proxy.target = NULL)
+RS.connect(host = NULL, port = 6311L, tls = FALSE, proxy.target = NULL,
+           proxy.wait = TRUE)
 RS.login(rsc, user, password, pubkey, authkey)
 RS.eval(rsc, x, wait = TRUE)
 RS.collect(rsc, timeout = Inf, detail = FALSE)
@@ -50,6 +51,9 @@ RS.oobCallbacks(rsc, send, msg)
     target designation. Not used when connected to transparent proxies
     or directly to Rserve instances. Note that literal IPv6 addresses must be
     quoted in \code{[]}.}
+  \item{proxy.wait}{if \code{TRUE} then the proxy will wait (indefinitely) if the
+    target is unavailable due to too high load, if \code{FALSE} then
+    the proxy is instructed to close the connection in such instance instead}
   \item{rsc}{Rserve connection as obtained from \code{RS.connect}}
   \item{user}{username for authentication (mandatory)}
   \item{password}{password for authentication}

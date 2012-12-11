@@ -129,7 +129,8 @@ struct phdr { /* always 16 bytes */
 #define IS_OOB_STREAM_READ(X)   (((X) & 0x0ffff000) == OOB_STREAM_READ)
 #define OOB_USR_CODE(X)         ((X) & 0xfff)
 
-#define CMD_PROXY_TARGET  (CMD_CLASS_PROXY | 0x01) /* payload is NUL-terminted string defining the desired target host:port -- IPv6 addresses must be quoted in [] */
+#define CMD_PROXY_TARGET    (CMD_CLASS_PROXY | 0x01) /* payload is NUL-terminted string defining the desired target host:port -- IPv6 addresses must be quoted in [] */
+#define CMD_PROXY_GET_SLOT  (CMD_CLASS_PROXY | 0x02) /* no payload, lock-in a slot for connection-limited hosts, proxy closes connection if the target slot is unavailable at this point */
 
 /* stat codes; 0-0x3f are reserved for program specific codes - e.g. for R
    connection they correspond to the stat of Parse command.

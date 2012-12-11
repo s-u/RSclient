@@ -1,4 +1,4 @@
-RS.connect <- function(host=NULL, port=6311L, tls=FALSE, proxy.target=NULL) .Call("RS_connect", host, port, tls, proxy.target, PACKAGE="RSclient")
+RS.connect <- function(host=NULL, port=6311L, tls=FALSE, proxy.target=NULL, proxy.wait=TRUE) .Call("RS_connect", host, port, tls, proxy.target, proxy.wait, PACKAGE="RSclient")
 
 RS.close <- function(rsc) .Call("RS_close", rsc)
 
