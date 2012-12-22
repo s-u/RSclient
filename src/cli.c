@@ -414,30 +414,6 @@ static long rsc_slurp(rsconn_t *c, long needed) {
 /* Rserve protocol */
 #include "RSprotocol.h"
 
-static const char *rs_err_descr(int stat) {
-    switch (stat) {
-    case ERR_auth_failed: return "authentication failed";
-    case ERR_conn_broken: return "connection is broken/closed";
-    case ERR_inv_par: return "invalid parameter";
-    case ERR_inv_cmd: return "invalid command";
-    case ERR_Rerror:  return "R-side error";
-    case ERR_IOerror: return "I/O error on the server side";
-    case ERR_accessDenied: return "access denied";
-    case ERR_unsupportedCmd: return "unsupported command";
-    case ERR_unknownCmd: return "unknown command";
-    case ERR_data_overflow: return "data overflow";
-    case ERR_object_too_big: return "object is too big";
-    case ERR_out_of_mem: return "out of memory";
-    case ERR_ctrl_closed: return "control commands are disabled";
-    case ERR_unavailable: return "feature is not avaiable in that particular Rserve build";
-    case ERR_cryptError: return "crypto-system error";
-    case ERR_securityClose: return "connection closed due to security violation";
-    case 127: return "R-side error in eval*() - use try() when in doubt";
-    }
-    if (stat < 0x40) return "application-specific error";
-    return "unknown error";
-}
-
 /* --- R API -- */
 
 #define R2UTF8(X) translateCharUTF8(STRING_ELT(X, 0))
@@ -549,6 +525,8 @@ SEXP RS_close(SEXP sc) {
 static const char *rs_status_string(int status) {
     switch (status) {
     case 0: return "(status is OK)";
+    case 127:
+    case 1: return "error in R during evaluation";
     case 2: return "R parser: input incomplete";
     case 3: return "R parser: error in the expression";
     case 4: return "R parser: EOF reached";
@@ -745,7 +723,7 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
     if (c->in_cmd) c->in_cmd--;
     if (hdr->cmd != RESP_OK) {
 	rsc_slurp(c, tl);
-	Rf_error("command failed with status code %d: %s", CMD_STAT(hdr->cmd), rs_status_string(CMD_STAT(hdr->cmd)));
+	Rf_error("command failed with status code 0x%x: %s", CMD_STAT(hdr->cmd), rs_status_string(CMD_STAT(hdr->cmd)));
     }
     return tl;
 }
@@ -919,7 +897,7 @@ SEXP RS_ctrl_str(SEXP sc, SEXP sCmd, SEXP sPayload) {
 	}
     }
     if (CMD_FULL(hdr.cmd) == RESP_ERR)
-	Rf_error("Rserve responded with an error code 0x%x: %s", CMD_STAT(hdr.cmd), rs_err_descr(CMD_STAT(hdr.cmd)));
+	Rf_error("Rserve responded with an error code 0x%x: %s", CMD_STAT(hdr.cmd), rs_status_string(CMD_STAT(hdr.cmd)));
     else if (CMD_FULL(hdr.cmd) != RESP_OK)
 	Rf_error("unknown response 0x%x", hdr.cmd);
 	
