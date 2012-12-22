@@ -17,6 +17,12 @@ RS.collect <- function(rsc, timeout = Inf, detail = FALSE) {
   } else r
 }
 
+RS.server.eval <- function(rsc, text) .Call("RS_ctrl_str", rsc, 0x42L, text, PACKAGE="RSclient")
+
+RS.server.source <- function(rsc, filename) .Call("RS_ctrl_str", rsc, 0x45L, filename, PACKAGE="RSclient")
+
+RS.server.shutdown <- function(rsc) .Call("RS_ctrl_str", rsc, 0x44L, "", PACKAGE="RSclient")
+
 RS.switch <- function(rsc, protocol="TLS") .Call("RS_switch", rsc, protocol, PACKAGE="RSclient")
 
 RS.authkey <- function(rsc, type="rsa-authkey") .Call("RS_authkey", rsc, type, PACKAGE="RSclient")

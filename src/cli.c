@@ -411,6 +411,30 @@ static long rsc_slurp(rsconn_t *c, long needed) {
     return len;
 }
 
+static const char *rs_err_descr(int stat) {
+    switch (stat) {
+    case ERR_auth_failed: return "authentication failed";
+    case ERR_conn_broken: return "connection is broken/closed";
+    case ERR_inv_par: return "invalid parameter";
+    case ERR_inv_cmd: return "invalid command";
+    case ERR_Rerror:  return "R-side error";
+    case ERR_IOerror: return "I/O error on the server side";
+    case ERR_accessDenied: return "access denied";
+    case ERR_unsupportedCmd: return "unsupported command";
+    case ERR_unknownCmd: return "unknown command";
+    case ERR_data_overflow: return "data overflow";
+    case ERR_object_too_big: return "object is too big";
+    case ERR_out_of_mem: return "out of memory";
+    case ERR_ctrl_closed: return "control commands are disabled";
+    case ERR_unavailable: return "feature is not avaiable in that particular Rserve build";
+    case ERR_cryptError: return "crypto-system error";
+    case ERR_securityClose: return "connection closed due to security violation";
+    case 127: return "R-side error in eval*() - use try() when in doubt";
+    }
+    if (stat < 0x40) return "application-specific error";
+    return "unknown error";
+}
+
 /* --- R API -- */
 
 #define R2UTF8(X) translateCharUTF8(STRING_ELT(X, 0))
@@ -857,6 +881,48 @@ SEXP RS_assign(SEXP sc, SEXP what, SEXP sWait) {
     return res;
 }
 
+SEXP RS_ctrl_str(SEXP sc, SEXP sCmd, SEXP sPayload) {
+    rsconn_t *c;
+    const char *pl;
+    int cmd = asInteger(sCmd), pll, par;
+
+    if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
+    c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (!c) Rf_error("invalid NULL connection");
+    if (c->in_cmd) Rf_error("uncollected result from previous command, remove first");
+    if (TYPEOF(sPayload) != STRSXP || LENGTH(sPayload) != 1)
+	Rf_error("invalid control command payload - string expected"); 
+    pl = CHAR(STRING_ELT(sPayload, 0));
+    pll = strlen(pl);
+
+    if ((cmd & (~ 0xf)) != CMD_ctrl)
+	Rf_error("invalid command - must be a control command");
+    
+    hdr.cmd = cmd;
+    hdr.len = pl + 5; /* payload + header + NUL */
+    hdr.dof = 0;
+    hdr.res = 0;
+    rsc_write(c, &hdr, sizeof(hdr));
+    par = SET_PAR(DT_STRING, pl + 1);
+    rsc_write(c, &par, sizepf(par));
+    rsc_write(c, pl, pll);
+    rsc_flush(c);
+    tl = get_hdr(sc, c, &hdr);
+    if (tl) {
+	res = allocVector(RAWSXP, tl);
+	if (rsc_read(c, RAW(res), tl) != tl) {
+	    RS_close(sc);
+	    Rf_error("read error reading payload of the result");
+	}
+    }
+    if (CMD_FULL(hdr.cmd) == RESP_ERR)
+	Rf_error("Rserve responded with an error code 0x%x: %s", CMD_STAT(hdr.cmd), rs_err_descr(CMD_STAT(hdr.cmd)));
+    else if (CMD_FULL(hdr.cmd) != RESP_OK)
+	Rf_error("unknown response 0x%x", hdr.cmd);
+	
+    return ScalarLogical(TRUE);
+}
+
 SEXP RS_switch(SEXP sc, SEXP prot) {
     rsconn_t *c;
 
@@ -1066,7 +1132,7 @@ SEXP RS_print(SEXP sc) {
     else if (c->s == -1)
 	Rprintf(" Closed Rserve connection %p\n", c);
     else
-	Rprintf(" Rserve %s connection %p (socket %d, queue length %d)\n", c->tls ? "TLA/QAP1" : "QAP1", c, c->s, c->in_cmd);
+	Rprintf(" Rserve %s connection %p (socket %d, queue length %d)\n", c->tls ? "TLS/QAP1" : "QAP1", c, c->s, c->in_cmd);
     return sc;
 }
 

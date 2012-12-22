@@ -105,13 +105,7 @@ struct phdr { /* always 16 bytes */
 
 #define CMD_STAT(X) (((X) >> 24)&127) /* returns the stat code of the response */
 #define SET_STAT(X,s) ((X) | (((s) & 127) << 24)) /* sets the stat code */
-
-#define CMD_RESP 0x10000  /* all responses have this flag set */
-
-#define RESP_OK (CMD_RESP|0x0001) /* command succeeded; returned parameters depend
-				     on the command issued */
-#define RESP_ERR (CMD_RESP|0x0002) /* command failed, check stats code
-				      attached string may describe the error */
+#define CMD_FULL(X) ((X) & 0xfffff)  /* lower 20-bit are used by the command (class + cmd) */
 
 #define CMD_CLASS(X) ((X) & 0xf0000) /* get command class */
 #define CMD_CLASS_RSERVE   0x00000   /* regular Rserve commands */
@@ -119,7 +113,14 @@ struct phdr { /* always 16 bytes */
 #define CMD_CLASS_OOB      0x20000   /* OOB commands */
 #define CMD_CLASS_PROXY    0x40000   /* proxy commands (filtered out by proxies) */
 
-#define CMD_OOB  0x20000  /* out-of-band data - i.e. unsolicited messages */
+#define CMD_RESP CMD_CLASS_RESPONSE  /* all responses have this flag set */
+
+#define RESP_OK (CMD_RESP|0x0001) /* command succeeded; returned parameters depend
+				     on the command issued */
+#define RESP_ERR (CMD_RESP|0x0002) /* command failed, check stats code
+				      attached string may describe the error */
+
+#define CMD_OOB             CMD_CLASS_OOB  /* out-of-band data - i.e. unsolicited messages */
 #define OOB_SEND        (CMD_OOB | 0x1000) /* OOB send - unsolicited SEXP sent from the R instance to the client. 12 LSB are reserved for application-specific code */
 #define OOB_MSG         (CMD_OOB | 0x2000) /* OOB message - unsolicited message sent from the R instance to the client requiring a response. 12 LSB are reserved for application-specific code */
 #define OOB_STREAM_READ (CMD_OOB | 0x4000) /* OOB stream read request - server requests streaming data from the client (typically streaming input for computation) */

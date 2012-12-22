@@ -13,9 +13,9 @@
 %\alias{RSdetach}
 %\alias{RSevalDetach}
 %\alias{RSattach}
-%\alias{RSshutdown}
-%\alias{RSserverEval}
-%\alias{RSserverSource}
+\alias{RS.server.shutdown}
+\alias{RS.server.eval}
+\alias{RS.server.source}
 \usage{
 RS.connect(host = NULL, port = 6311L, tls = FALSE, proxy.target = NULL,
            proxy.wait = TRUE)
@@ -26,6 +26,9 @@ RS.close(rsc)
 RS.assign(rsc, name, value, wait = TRUE)
 RS.switch(rsc, protocol = "TLS")
 RS.authkey(rsc, type = "rsa-authkey")
+RS.server.eval(rsc, text)
+RS.server.source(rsc, filename)
+RS.server.shutdown(rsc)
 RS.oobCallbacks(rsc, send, msg)
 }
 \description{
@@ -79,6 +82,8 @@ RS.oobCallbacks(rsc, send, msg)
   \item{type}{type of the authentication to perform (string)}
   \item{send}{callback function for \code{OOB_SEND}}
   \item{msg}{callback function for \code{OOB_MSG}}
+  \item{text}{string that will be parsed and evaluated on the server side}
+  \item{filename}{name of the file (on the server!) to source}
 }
 \details{
   \code{RS.connect} creates a connection to a Rserve. The returned handle
@@ -122,6 +127,8 @@ RS.oobCallbacks(rsc, send, msg)
   waiting for the response to another command (typically
   \code{RS.eval}). OOB commands must be explicitly enabled in the
   server in order to be used (they are disabled by default).
+
+  \code{RS.server.eval} \code{RS.server.source} \code{RS.server.shutdown} 
 }
 \examples{
 \dontrun{
