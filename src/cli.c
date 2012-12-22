@@ -411,6 +411,9 @@ static long rsc_slurp(rsconn_t *c, long needed) {
     return len;
 }
 
+/* Rserve protocol */
+#include "RSprotocol.h"
+
 static const char *rs_err_descr(int stat) {
     switch (stat) {
     case ERR_auth_failed: return "authentication failed";
@@ -443,9 +446,6 @@ static void rsconn_fin(SEXP what) {
     rsconn_t *c = (rsconn_t*) EXTPTR_PTR(what);
     if (c) rsc_close(c);
 }
-
-/* Rserve protocol */
-#include "RSprotocol.h"
 
 /* FIXME: hack for now -- most of this client works only on little-endian machines
    but there is some feeble effort to fix that -- in the meantime it's just noop */
@@ -884,7 +884,9 @@ SEXP RS_assign(SEXP sc, SEXP what, SEXP sWait) {
 SEXP RS_ctrl_str(SEXP sc, SEXP sCmd, SEXP sPayload) {
     rsconn_t *c;
     const char *pl;
+    struct phdr hdr;
     int cmd = asInteger(sCmd), pll, par;
+    long tl;
 
     if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
     c = (rsconn_t*) EXTPTR_PTR(sc);
@@ -899,17 +901,18 @@ SEXP RS_ctrl_str(SEXP sc, SEXP sCmd, SEXP sPayload) {
 	Rf_error("invalid command - must be a control command");
     
     hdr.cmd = cmd;
-    hdr.len = pl + 5; /* payload + header + NUL */
+    hdr.len = pll + 5; /* payload + header + NUL */
     hdr.dof = 0;
     hdr.res = 0;
     rsc_write(c, &hdr, sizeof(hdr));
-    par = SET_PAR(DT_STRING, pl + 1);
-    rsc_write(c, &par, sizepf(par));
-    rsc_write(c, pl, pll);
+    par = SET_PAR(DT_STRING, pll + 1);
+    rsc_write(c, &par, sizeof(par));
+    rsc_write(c, pl, pll + 1);
     rsc_flush(c);
     tl = get_hdr(sc, c, &hdr);
     if (tl) {
-	res = allocVector(RAWSXP, tl);
+	/* FIXME: we actually discard it so we could use slurp instead ..? */
+	SEXP res = allocVector(RAWSXP, tl);
 	if (rsc_read(c, RAW(res), tl) != tl) {
 	    RS_close(sc);
 	    Rf_error("read error reading payload of the result");
