@@ -541,15 +541,15 @@ static const char *rs_status_string(int status) {
     case ERR_unsupportedCmd: return "unsupported command";
     case ERR_unknownCmd: return "unknown command";
     case ERR_data_overflow: return "data overflow";
-    case ERR_object_too_big: return "object too big";
+    case ERR_object_too_big: return "object is too big";
     case ERR_out_of_mem: return "out of memory";
-    case ERR_ctrl_closed: return "no control line present";
+    case ERR_ctrl_closed: return "no control line present (control commands disabled or server shutdown)";
     case ERR_session_busy: return "session is busy";
     case ERR_detach_failed: return "unable to detach session";
     case ERR_disabled: return "feature is disabled";
     case ERR_unavailable: return "feature is not available in this build of the server";
     case ERR_cryptError: return "crypto-system error";
-    case ERR_securityClose: return "connection aboted for security reasons";
+    case ERR_securityClose: return "connection closed due to security violation";
     }
     return "(unknown error code)";
 }

@@ -128,7 +128,23 @@ RS.oobCallbacks(rsc, send, msg)
   \code{RS.eval}). OOB commands must be explicitly enabled in the
   server in order to be used (they are disabled by default).
 
-  \code{RS.server.eval} \code{RS.server.source} \code{RS.server.shutdown} 
+  \code{RS.server.eval}, \code{RS.server.source} and
+  \code{RS.server.shutdown} are `control commands' which are enqueued to
+  be processed by the server asynchronously. They return \code{TRUE} on
+  success which means the command was enqueued - it does not mean that
+  the server has processed the command. All control commands affect only
+  future connections, they do NOT affect any already established client
+  connection (including the curretn one). \code{RS.server.eval} parses
+  and evaluates the given code in the server instance,
+  \code{RS.server.source} sources the given file in the server (the path
+  is interpreted by the server, it is not the local path of the client!)
+  and \code{RS.server.shutdown} attempts a clean shutdown of the
+  server. Note that control commands are disabled by default and must be
+  enabled in Rserve either in the configuration file with \code{control
+  enable} or on the command line with \code{--RS-enable-control} (the
+  latter only works with Rserve 1.7 and higher). If Rserve is configured
+  with authentication enabled then only admin users can issues control
+  commands (see Rserve documentation for details).
 }
 \examples{
 \dontrun{
