@@ -26,6 +26,9 @@ static int wsock_up = 0;
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#ifndef AF_LOCAL
+#define AF_LOCAL AF_UNIX
+#endif
 /* until we use confgiure we hard-code TLS use for now */
 #define USE_TLS 1
 /* and we enable IPv6 if we see it */
