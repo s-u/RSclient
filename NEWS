@@ -1,4 +1,4 @@
-0.7-1	(under development)
+0.7-1	2013-02-19
    o	add support for asynchronous connections and OOB streaming
 
    o	add support for non-transparent proxy protocol (RSpx)
