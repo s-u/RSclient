@@ -13,8 +13,8 @@
 
 #include <sys/types.h>
 #ifdef WIN32
-#include <windows.h>
 #include <winsock2.h>
+#include <windows.h>
 #define USE_TLS 1
 static int wsock_up = 0;
 #define MAX_RECV 65536

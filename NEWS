@@ -1,3 +1,6 @@
+0.7-2	(under development)
+   o	switch the order of winsock2.h and windows.h
+
 0.7-1	2013-02-19
    o	add support for asynchronous connections and OOB streaming
 
