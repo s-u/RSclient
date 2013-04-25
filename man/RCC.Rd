@@ -166,11 +166,47 @@ RS.oobCallbacks(rsc, send, msg)
   x <- rnorm(1e5)
   ## this sends the contents of x to the remote side and runs `sum` on
   ## it without actually creating the binding x on the remote side
-  RS.eval.lang(c, as.call(list(quote(sum), x)))
+  RS.eval(c, as.call(list(quote(sum), x)), lazy=FALSE)
   RS.close(c)
   }
 }
 \author{Simon Urbanek}
+\section{Parallel use}{
+  It is currently possible to use Rserve connections in parallel via
+  \code{mcparallel} or \code{mclapply} if certain conditions are
+  met. First, only clear connection (non-TLS) are eligible for parallel
+  use and there may be no OOB commands. Then it is legal to use
+  connections in forked process as long as both the request is sent and
+  the result is collected in the same process while no other process
+  uses the connection. However, connections can only be created in the
+  parent session (except if the connection is created and subsequently
+  closed in the child process).
+
+  One possible use is to initiate connections to a cluster and perform
+  operations in parallel. For example:
+
+  \preformatted{    library(RSclient)
+    library(parallel)
+    ## try to connect to 50 different nodes
+    ## cannot parallelize this - must be in the parent process
+    c <- lapply(paste("machine", 1:50, sep=''),
+                function(name) try(RS.connect(name), silent=TRUE))
+    ## keep only successful connections
+    c <- c[sapply(c, class) == "RserveConnection"]
+    ## login to all machines in parallel (using RSA secured login)
+    unlist(mclapply(c,
+           function(c) RS.login(c, "user", "password",, RS.authkey(c)),
+	   mc.cores=length(c)))
+    ## do parallel work ...
+    ## pre-load some "job" function to all nodes
+    unlist(mclapply(c, function(c) RS.assign(c, job), mc.cores=length(c)))
+    ## etc. etc. then call it in parallel on all nodes ...
+    mclapply(c, function(c) RS.eval(c, job()), mc.cores=length(c))
+    
+    ## close all
+    sapply(c, RS.close)
+  }
+}
 \note{
   The RSclient package can be compiled with TLS/SSL support based on
   OpenSSL. Therefore the following statements may be true if RSclient
