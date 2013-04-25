@@ -171,4 +171,14 @@ RS.oobCallbacks(rsc, send, msg)
   }
 }
 \author{Simon Urbanek}
+\note{
+  The RSclient package can be compiled with TLS/SSL support based on
+  OpenSSL. Therefore the following statements may be true if RSclient
+  binaries are shipped together with OpenSSL: This product includes
+  software developed by the OpenSSL Project for use in the OpenSSL
+  Toolkit (http://www.openssl.org/). This product includes cryptographic
+  software written by Eric Young (eay@cryptsoft.com). This product
+  includes software written by Tim Hudson (tjh@cryptsoft.com).
+  They are not true otherwise.
+}
 \keyword{interface}

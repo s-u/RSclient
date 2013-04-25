@@ -5,5 +5,5 @@ Author: Simon Urbanek <Simon.Urbanek@r-project.org>
 Maintainer: Simon Urbanek <Simon.Urbanek@r-project.org>
 Depends: R (>= 2.7.0)
 Description: Client for Rserve, allowing to connect to Rserve instances and issue commands.
-License: GPL-2 + file LICENSE
-URL: http://www.rforge.net/Rserve/
+License: GPL-2 | file LICENSE
+URL: http://www.rforge.net/RSclient/
