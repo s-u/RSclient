@@ -672,7 +672,6 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 	if (hdr->cmd & CMD_OOB) {
 	    SEXP res, ee = R_NilValue;
 	    unsigned int *ibuf;
-	    int upc = 0;
 	    PROTECT(res = allocVector(RAWSXP, tl));
 	    if (rsc_read(c, RAW(res), tl) != tl) {
 		c->in_cmd = 0;
@@ -682,7 +681,7 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 	    ibuf = (unsigned int*) RAW(res);
 	    /* FIXME: we assume that we get encoded SEXP - we should check ... */
 	    ibuf += 1;
-	    res = QAP_decode(&ibuf, &upc);
+	    res = QAP_decode(&ibuf);
 
 	    /* FIXME: Rserve has a bug(?) that sets CMD_RESP on OOB commands so we clear it for now ... */
 	    hdr->cmd &= ~CMD_RESP;
@@ -718,7 +717,7 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 		}
 		UNPROTECT(1);
 	    }
-	    UNPROTECT(upc + 1);
+	    UNPROTECT(1);
 	    continue;
 	}
 	break;
@@ -729,6 +728,65 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 	Rf_error("command failed with status code 0x%x: %s", CMD_STAT(hdr->cmd), rs_status_string(CMD_STAT(hdr->cmd)));
     }
     return tl;
+}
+
+SEXP RS_eval_qap(SEXP sc, SEXP what, SEXP sWait) {
+    SEXP res = R_NilValue;
+    rsconn_t *c;
+    int async = (asInteger(sWait) == 0);
+
+    if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
+    c = (rsconn_t*) EXTPTR_PTR(sc);
+    if (!c) Rf_error("invalid NULL connection");
+    if (!async && c->in_cmd) Rf_error("uncollected result from previous command, remove first");
+
+    {
+	struct phdr rhdr;
+	long pl   = QAP_getStorageSize(what), tl;
+	SEXP outv = allocVector(RAWSXP, pl);
+	int isx   = pl > 0x7fffff;
+	unsigned int *oh = (unsigned int*) RAW(outv);
+	unsigned int *ot = QAP_storeSEXP(oh + (isx ? 2 : 1), what, pl);
+
+	pl = sizeof(int) * (long) (ot - oh);
+	rhdr.cmd = CMD_eval;
+	rhdr.len = pl;
+	rhdr.dof = 0;
+#ifdef __LP64__
+	rhdr.res = pl >> 32;
+#else
+	rhdr.res = 0;
+#endif
+	oh[0] = SET_PAR(DT_SEXP | (isx ? DT_LARGE : 0), pl - (isx ? 8 : 4));
+	if (isx) oh[1] = (pl - 8) >> 24;
+	rsc_write(c, &rhdr, sizeof(rhdr));
+	if (pl) rsc_write(c, RAW(outv), pl);
+	rsc_flush(c);
+
+	if (async) {
+	    c->in_cmd++;
+	    return R_NilValue;
+	}
+	tl = get_hdr(sc, c, &rhdr);
+	res = allocVector(RAWSXP, tl);
+	if (rsc_read(c, RAW(res), tl) != tl) {
+	    RS_close(sc);
+	    Rf_error("read error reading payload of the eval result");
+	} else {
+	    unsigned int *ibuf = (unsigned int*) RAW(res);
+	    int par_type = PAR_TYPE(*ibuf);
+	    int is_large = (par_type & DT_LARGE) ? 1 : 0;
+	    if (is_large) par_type ^= DT_LARGE;
+	    if (par_type != DT_SEXP)
+		Rf_error("invalid result type coming from eval");
+	    ibuf += is_large + 1;
+	    PROTECT(res);
+	    res = QAP_decode(&ibuf);
+	    UNPROTECT(1);
+	}
+    }
+    
+    return res;
 }
 
 SEXP RS_eval(SEXP sc, SEXP what, SEXP sWait) {

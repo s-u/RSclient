@@ -1,5 +1,5 @@
-#ifndef QAP_DECODE_H__
-#define QAP_DECODE_H__
+#ifndef QAP_H__
+#define QAP_H__
 
 #ifndef USE_RINTERNALS
 #define USE_RINTERNALS 1
@@ -30,7 +30,7 @@ typedef unsigned long rlen_t;
 #endif /* __LP64__ */
 #endif /* ULONG_MAX */
 
-SEXP QAP_decode(unsigned int **buf, int *UPC);
+SEXP QAP_decode(unsigned int **buf);
 rlen_t QAP_getStorageSize(SEXP x);
 unsigned int* QAP_storeSEXP(unsigned int* buf, SEXP x, rlen_t storage_size);
 

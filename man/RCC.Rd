@@ -4,6 +4,7 @@
 \alias{RS.connect}
 \alias{RS.close}
 \alias{RS.eval}
+\alias{RS.eval.lang}
 \alias{RS.login}
 \alias{RS.switch}
 \alias{RS.authkey}
@@ -21,6 +22,7 @@ RS.connect(host = NULL, port = 6311L, tls = FALSE, proxy.target = NULL,
            proxy.wait = TRUE)
 RS.login(rsc, user, password, pubkey, authkey)
 RS.eval(rsc, x, wait = TRUE)
+RS.eval.lang(rsc, lang, wait = TRUE)
 RS.collect(rsc, timeout = Inf, detail = FALSE)
 RS.close(rsc)
 RS.assign(rsc, name, value, wait = TRUE)
@@ -66,6 +68,9 @@ RS.oobCallbacks(rsc, send, msg)
   \item{wait}{if \code{TRUE} then the result is delivered synchronously,
     if \code{FALSE} then \code{NULL} is returned instead and the result
     can be collected later with \code{RS.collect}}
+  \item{lang}{language construct to be evaluated on the remote
+    side. Most commonly this is a call but it can also be a symbol or
+    a constant.}
   \item{timeout}{timeout (in seconds) to wait before giving up}
   \item{detail}{if \code{TRUE} then the result payload is returned in a
     list with elements \code{value} (unserialized result value of the
@@ -102,7 +107,13 @@ RS.oobCallbacks(rsc, send, msg)
   be spoofed. When using TLS connections \code{RS.authkey} is not
   necessary as the connection is already encrypted.
 
-  \code{RS.eval} evaluates the supplied expression remotely.
+  \code{RS.eval} evaluates the supplied expression remotely by passing
+  the deparsed string and parsing it on the remote side.
+
+  \code{RS.eval.lang} evaluates the language construct by sending it to
+  the remote side and evaluating it. Most commonly the language
+  construct is a call - the quoted components are then resolved on the
+  remote side while the unquoted ones are resolved locally.
 
   \code{RS.collect} collects results from \code{RS.eval(..., wait =
     FALSE)} calls. Note that in this case \code{rsc} can be either one
@@ -153,6 +164,10 @@ RS.oobCallbacks(rsc, send, msg)
   RS.eval(c, library(MASS))
   RS.eval(c, rlm(stack.loss ~ ., stackloss)$coeff)
   RS.eval(c, getwd())
+  x <- rnorm(1e5)
+  ## this sends the contents of x to the remote side and runs `sum` on
+  ## it without actually creating the binding x on the remote side
+  RS.eval.lang(c, as.call(list(quote(sum), x)))
   RS.close(c)
   }
 }
