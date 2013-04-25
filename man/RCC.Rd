@@ -4,7 +4,7 @@
 \alias{RS.connect}
 \alias{RS.close}
 \alias{RS.eval}
-\alias{RS.eval.lang}
+\alias{RS.eval.qap}
 \alias{RS.login}
 \alias{RS.switch}
 \alias{RS.authkey}
@@ -21,8 +21,8 @@
 RS.connect(host = NULL, port = 6311L, tls = FALSE, proxy.target = NULL,
            proxy.wait = TRUE)
 RS.login(rsc, user, password, pubkey, authkey)
-RS.eval(rsc, x, wait = TRUE)
-RS.eval.lang(rsc, lang, wait = TRUE)
+RS.eval(rsc, x, wait = TRUE, lazy = TRUE)
+RS.eval.qap(rsc, x, wait = TRUE)
 RS.collect(rsc, timeout = Inf, detail = FALSE)
 RS.close(rsc)
 RS.assign(rsc, name, value, wait = TRUE)
@@ -68,13 +68,14 @@ RS.oobCallbacks(rsc, send, msg)
   \item{wait}{if \code{TRUE} then the result is delivered synchronously,
     if \code{FALSE} then \code{NULL} is returned instead and the result
     can be collected later with \code{RS.collect}}
-  \item{lang}{language construct to be evaluated on the remote
-    side. Most commonly this is a call but it can also be a symbol or
-    a constant.}
-  \item{timeout}{timeout (in seconds) to wait before giving up}
+  \item{lazy}{if \code{TRUE} then the passed expression is not evaluated
+    locally but passed for remote evaluation (as if quoted, modulo
+    substitution). Otherwise it is evaluated locally first and the
+    result is passed for remote evaluation.}
+  \item{timeout}{numeric, timeout (in seconds) to wait before giving up}
   \item{detail}{if \code{TRUE} then the result payload is returned in a
     list with elements \code{value} (unserialized result value of the
-    command - where applciable) and \code{rsc} (connection which
+    command - where applicable) and \code{rsc} (connection which
     returned this result) which allows to identify the source of the
     result and to distinguish timeout from a \code{NULL}
     value. Otherwise the returned value is just the payload value of the
@@ -107,13 +108,11 @@ RS.oobCallbacks(rsc, send, msg)
   be spoofed. When using TLS connections \code{RS.authkey} is not
   necessary as the connection is already encrypted.
 
-  \code{RS.eval} evaluates the supplied expression remotely by passing
-  the deparsed string and parsing it on the remote side.
+  \code{RS.eval} evaluates the supplied expression remotely.
 
-  \code{RS.eval.lang} evaluates the language construct by sending it to
-  the remote side and evaluating it. Most commonly the language
-  construct is a call - the quoted components are then resolved on the
-  remote side while the unquoted ones are resolved locally.
+  \code{RS.eval.qap} behaves like \code{RS.eval(..., lazy=FALSE)}, but
+  uses the Rserve QAP serialization of R objects instead of the native R
+  serialization.
 
   \code{RS.collect} collects results from \code{RS.eval(..., wait =
     FALSE)} calls. Note that in this case \code{rsc} can be either one

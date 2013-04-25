@@ -2,9 +2,9 @@ RS.connect <- function(host=NULL, port=6311L, tls=FALSE, proxy.target=NULL, prox
 
 RS.close <- function(rsc) .Call("RS_close", rsc)
 
-RS.eval <- function(rsc, x, wait=TRUE) { r <- .Call("RS_eval", rsc, serialize(substitute(x), NULL, FALSE), wait, PACKAGE="RSclient"); if (is.raw(r)) unserialize(r) else r }
+RS.eval <- function(rsc, x, wait=TRUE, lazy=TRUE) { r <- .Call("RS_eval", rsc, serialize(if (isTRUE(lazy)) substitute(x) else x, NULL, FALSE), wait, PACKAGE="RSclient"); if (is.raw(r)) unserialize(r) else r }
 
-RS.eval.lang <- function(rsc, lang, wait=TRUE) .Call("RS_eval_qap", rsc, lang, wait, PACKAGE="RSclient")
+RS.eval.qap <- function(rsc, x, wait=TRUE) .Call("RS_eval_qap", rsc, x, wait, PACKAGE="RSclient")
 
 RS.collect <- function(rsc, timeout = Inf, detail = FALSE) {
   r <- .Call("RS_collect", rsc, timeout, PACKAGE="RSclient")

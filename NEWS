@@ -1,7 +1,11 @@
 0.7-2	(under development)
-   o	add RS.eval.lang() which allows the construction of remote calls
-	with both remote and local symbols (requires Rserve 1.7-0
-	with DT_SEXP support in CMD_eval).
+   o	add RS.eval(..., lazy=FALSE) which evaluates the argument
+	locally and then remotely. This allows the construction of
+	remote calls with both remote and local symbols.
+
+   o	add RS.eval.qap() which uses Rserve QAP encoding instead of
+	native R serialization (requires Rserve 1.7-0 with DT_SEXP
+	support in CMD_eval).
 
    o	switch the order of winsock2.h and windows.h
 
