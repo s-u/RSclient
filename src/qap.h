@@ -9,6 +9,9 @@
 
 #include "RSprotocol.h"
 
+/* NOTE: we only support little-endian machines! */
+#define NATIVE_COPY 1
+
 /* stuff to enulate compatibility with Rserve's use */
 #define DISABLE_ENCODING 1
 #ifndef ptoi
