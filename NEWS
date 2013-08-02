@@ -1,4 +1,4 @@
-0.7-2	(under development)
+0.7-2	2013-07-02
    o	add RS.eval(..., lazy=FALSE) which evaluates the argument
 	locally and then remotely. This allows the construction of
 	remote calls with both remote and local symbols.
@@ -6,6 +6,10 @@
    o	add RS.eval.qap() which uses Rserve QAP encoding instead of
 	native R serialization (requires Rserve 1.7-0 with DT_SEXP
 	support in CMD_eval).
+
+   o	add support for Rserve object-capability (OC) model mode.
+	OC calls are issued using RS.eval.qap() with OCref
+	as the function to call.
 
    o	switch the order of winsock2.h and windows.h
 
