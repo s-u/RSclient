@@ -716,9 +716,9 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 	    /* FIXME: Rserve has a bug(?) that sets CMD_RESP on OOB commands so we clear it for now ... */
 	    hdr->cmd &= ~CMD_RESP;
 
-	    if (IS_OOB_SEND(hdr->cmd) && c->oob_send_cb)
+	    if (IS_OOB_SEND(hdr->cmd) && c->oob_send_cb != R_NilValue)
 		PROTECT(ee = lang3(c->oob_send_cb, ScalarInteger(OOB_USR_CODE(hdr->cmd)), res));
-	    if (IS_OOB_MSG(hdr->cmd) && c->oob_msg_cb)
+	    if (IS_OOB_MSG(hdr->cmd) && c->oob_msg_cb != R_NilValue)
 		PROTECT(ee = lang3(c->oob_msg_cb, ScalarInteger(OOB_USR_CODE(hdr->cmd)), res));
 	    Rprintf(" - OOB %x %s (%d) %d\n", hdr->cmd, IS_OOB_SEND(hdr->cmd) ? "send" : "other", OOB_USR_CODE(hdr->cmd), (int) tl);
 	    if (ee != R_NilValue) {
@@ -1186,8 +1186,8 @@ SEXP RS_oob_cb(SEXP sc, SEXP send_cb, SEXP msg_cb, SEXP query) {
 	}
     }
     PROTECT(res = Rf_mkNamed(VECSXP, (const char *[]) { "send", "msg", "" }));
-    SET_VECTOR_ELT(res, 0, send_cb);
-    SET_VECTOR_ELT(res, 1, msg_cb);
+    SET_VECTOR_ELT(res, 0, c->oob_send_cb);
+    SET_VECTOR_ELT(res, 1, c->oob_msg_cb);
     UNPROTECT(1);
     return res;    
 }
