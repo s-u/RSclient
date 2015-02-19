@@ -720,7 +720,9 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 		PROTECT(ee = lang3(c->oob_send_cb, ScalarInteger(OOB_USR_CODE(hdr->cmd)), res));
 	    if (IS_OOB_MSG(hdr->cmd) && c->oob_msg_cb != R_NilValue)
 		PROTECT(ee = lang3(c->oob_msg_cb, ScalarInteger(OOB_USR_CODE(hdr->cmd)), res));
+#ifdef RC_DEBUG
 	    Rprintf(" - OOB %x %s (%d) %d\n", hdr->cmd, IS_OOB_SEND(hdr->cmd) ? "send" : "other", OOB_USR_CODE(hdr->cmd), (int) tl);
+#endif
 	    if (ee != R_NilValue) {
 		res = eval(ee, R_GlobalEnv);
 		if (IS_OOB_MSG(hdr->cmd)) {
