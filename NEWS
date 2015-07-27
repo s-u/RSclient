@@ -1,4 +1,4 @@
-0.7-3	(under development)
+0.7-3	2015-07-27
    o	fix an error when handling OOB if no handlers are registered
 
    o	RS.oobCallbacks(c) would always return NULL callabcks
