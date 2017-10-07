@@ -6,17 +6,18 @@ RS.eval <- function(rsc, x, wait=TRUE, lazy=TRUE) { r <- .Call("RS_eval", rsc, s
 
 RS.eval.qap <- function(rsc, x, wait=TRUE) .Call("RS_eval_qap", rsc, x, wait, PACKAGE="RSclient")
 
-RS.collect <- function(rsc, timeout = Inf, detail = FALSE) {
-  r <- .Call("RS_collect", rsc, timeout, PACKAGE="RSclient")
-  if (is.raw(r)) {
-    if (length(r)) {
-      if (isTRUE(detail))
-        list(value = unserialize(r), rsc = attr(r, "rsc"))
-      else unserialize(r)
-    } else if (isTRUE(detail))
-      list(rsc = attr(r, "rsc"))
-    else NULL
-  } else r
+RS.collect <- function(rsc, timeout = Inf, detail = FALSE, qap = FALSE) {
+    r <- .Call("RS_collect", rsc, timeout, PACKAGE="RSclient")
+    if (is.raw(r)) {
+        if (length(r)) {
+            val <- if (qap) .Call("RS_decode", r) else unserialize(r)
+            if (isTRUE(detail))
+                list(value = val, rsc = attr(r, "rsc"))
+            else val
+        } else if (isTRUE(detail))
+            list(rsc = attr(r, "rsc"))
+        else NULL
+    } else r
 }
 
 RS.server.eval <- function(rsc, text) .Call("RS_ctrl_str", rsc, 0x42L, text, PACKAGE="RSclient")

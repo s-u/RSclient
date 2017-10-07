@@ -922,6 +922,18 @@ SEXP RS_collect(SEXP sc, SEXP s_timeout) {
     }
 }
 
+SEXP RS_decode(SEXP sWhat) {
+    unsigned int *ibuf = (unsigned int*) RAW(sWhat);
+    int par_type = PAR_TYPE(*ibuf);
+    int is_large = (par_type & DT_LARGE) ? 1 : 0;
+    if (is_large) par_type ^= DT_LARGE;
+    if (par_type != DT_SEXP)
+	Rf_error("invalid result - must be DT_SEXP");
+    ibuf += is_large + 1;
+    /* FIXME: we don't check if we message is complete */
+    return QAP_decode(&ibuf);
+}
+
 SEXP RS_assign(SEXP sc, SEXP what, SEXP sWait) {
     SEXP res;
     rsconn_t *c;
