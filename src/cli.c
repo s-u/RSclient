@@ -123,12 +123,46 @@ static int sock_recv(rsconn_t *c, void *buf, int len) {
 }
 
 #ifdef USE_TLS
+static int rsc_abort(rsconn_t *c, const char *reason);
+
 static int tls_send(rsconn_t *c, const void *buf, int len) {
-    return SSL_write((SSL*)c->tls, buf, len);
+    if (c->intr)
+	rsc_abort(c, "previous operation was interrupted, connection aborted");
+
+    /* SSL can fail with SSL_ERROR_WANT_READ/WRITE which is retriable */
+    while (1) {
+        int n = SSL_write((SSL*)c->tls, buf, len);
+        if (n <= 0) {
+            int serr = SSL_get_error((SSL*)c->tls, n);
+            if (serr != SSL_ERROR_WANT_READ && serr != SSL_ERROR_WANT_WRITE)
+                return n;
+            /* means we should allow interrupt as it can retry indefinitely */
+            c->intr = 1;
+            R_CheckUserInterrupt();
+            c->intr = 0;
+	} else return n;
+    }
+    return -1; /* unreachable */
 }
 
 static int tls_recv(rsconn_t *c, void *buf, int len) {
-    return SSL_read((SSL*)c->tls, buf, len);
+    if (c->intr)
+	rsc_abort(c, "previous operation was interrupted, connection aborted");
+
+    /* SSL can fail with SSL_ERROR_WANT_READ/WRITE which is retriable */
+    while (1) {
+	int n = SSL_read((SSL*)c->tls, buf, len);
+	if (n <= 0) {
+	    int serr = SSL_get_error((SSL*)c->tls, n);
+	    if (serr != SSL_ERROR_WANT_READ && serr != SSL_ERROR_WANT_WRITE)
+		return n;
+	    /* means we should allow interrupt as it can retry indefinitely */
+	    c->intr = 1;
+	    R_CheckUserInterrupt();
+	    c->intr = 0;
+	} else return n;
+    }
+    return -1; /* unreachable */
 }
 
 static int first_tls = 1;
