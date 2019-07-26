@@ -1,5 +1,5 @@
 /*
-   (C)Copyright 2012 Simon Urbanek.
+   (C)Copyright 2012-2019 Simon Urbanek.
 
    Released under GPL v2, no warranties.
 
@@ -177,13 +177,14 @@ static void init_tls() {
     }
 }
 
-static int tls_upgrade(rsconn_t *c) {
+static int tls_upgrade(rsconn_t *c, int verify) {
     SSL *ssl;
     SSL_CTX *ctx;
     if (first_tls)
 	init_tls();
     ctx = SSL_CTX_new(SSLv23_client_method());
     SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
+    SSL_CTX_set_verify(ctx, (verify == 0) ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, 0);
     c->tls = ssl = SSL_new(ctx);
     c->send = tls_send;
     c->recv = tls_recv;
@@ -462,8 +463,8 @@ static void rsconn_fin(SEXP what) {
     if (c) rsc_close(c);
 }
 
-SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget, SEXP sProxyWait) {
-    int port = asInteger(sPort), use_tls = (asInteger(useTLS) == 1), px_get_slot = (asInteger(sProxyWait) == 0);
+SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget, SEXP sProxyWait, SEXP sVerify) {
+    int port = asInteger(sPort), use_tls = (asInteger(useTLS) == 1), px_get_slot = (asInteger(sProxyWait) == 0), n;
     const char *host;
     char idstr[32];
     rsconn_t *c;
@@ -492,9 +493,12 @@ SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget, SEXP sPr
     if (!c)
 	Rf_error("cannot connect to %s:%d", host, port);
 #ifdef USE_TLS
-    if (use_tls && tls_upgrade(c) != 1) {
+    if (use_tls && (n = tls_upgrade(c, asInteger(sVerify))) != 1) {
+	int serr = SSL_get_error((SSL*)c->tls, n);
+	unsigned long err = ERR_get_error();
+	const char *es = ERR_error_string(err, 0);
 	rsc_close(c);
-	Rf_error("TLS handshake failed");
+	Rf_error("TLS handshake failed (SSL_error=%d; %s)", serr, es);
     }
 #endif	
     if (rsc_read(c, idstr, 32) != 32) {
@@ -1045,7 +1049,7 @@ SEXP RS_ctrl_str(SEXP sc, SEXP sCmd, SEXP sPayload) {
     return ScalarLogical(TRUE);
 }
 
-SEXP RS_switch(SEXP sc, SEXP prot) {
+SEXP RS_switch(SEXP sc, SEXP prot, SEXP sVerify) {
     rsconn_t *c;
 
     if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
@@ -1071,7 +1075,7 @@ SEXP RS_switch(SEXP sc, SEXP prot) {
 	tl = get_hdr(sc, c, &hdr);
 	if (tl)
 	    rsc_slurp(c, tl);
-	if (tls_upgrade(c) != 1) {
+	if (tls_upgrade(c, asInteger(sVerify)) != 1) {
 	    RS_close(sc);
 	    Rf_error("TLS negotitation failed");
 	}

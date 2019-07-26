@@ -1,4 +1,4 @@
-RS.connect <- function(host=NULL, port=6311L, tls=FALSE, proxy.target=NULL, proxy.wait=TRUE) .Call("RS_connect", host, port, tls, proxy.target, proxy.wait, PACKAGE="RSclient")
+RS.connect <- function(host=NULL, port=6311L, tls=FALSE, verify=TRUE, proxy.target=NULL, proxy.wait=TRUE) .Call("RS_connect", host, port, tls, proxy.target, proxy.wait, verify, PACKAGE="RSclient")
 
 RS.close <- function(rsc) .Call("RS_close", rsc)
 
@@ -26,7 +26,7 @@ RS.server.source <- function(rsc, filename) .Call("RS_ctrl_str", rsc, 0x45L, fil
 
 RS.server.shutdown <- function(rsc) .Call("RS_ctrl_str", rsc, 0x44L, "", PACKAGE="RSclient")
 
-RS.switch <- function(rsc, protocol="TLS") .Call("RS_switch", rsc, protocol, PACKAGE="RSclient")
+RS.switch <- function(rsc, protocol="TLS", verify=TRUE) .Call("RS_switch", rsc, protocol, verify, PACKAGE="RSclient")
 
 RS.authkey <- function(rsc, type="rsa-authkey") .Call("RS_authkey", rsc, type, PACKAGE="RSclient")
 
