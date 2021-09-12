@@ -1,1 +1,1 @@
-PKG_LIBS=-lssl
+PKG_LIBS=-lssl -lcrypto
