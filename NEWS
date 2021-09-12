@@ -1,4 +1,4 @@
-0.7-5	(under development)
+0.7-5	2021-09-12
    o	support long vectors when encoding (needed for R 3.5.0+)
 
    o	retry SSL/TLS read and write operations when required (#5)
