@@ -11,6 +11,16 @@
 	certificate and fail in case it is not valid. To restore
 	the old bahavior use `verify=FALSE'.
 
+   o	add `ca` argument to `RS.connect()` and `RS.switch()` to
+	supply any CA chain needed to verify the server certificate.
+	Only useful in conjunction with `verify=TRUE`.
+
+   o	it is now possible to supply a client certificate using
+	`chain` (for client certificate and its chain) and `key`
+	(for the client key) in `RS.connect()` and `RS.switch()`.
+	This allows client authentication in Rserve based on the
+	client certificate.
+
    o	use NAMESPACE for C symbol registration
 
 
