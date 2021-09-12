@@ -10,6 +10,8 @@ It supports Rserve both in regular as well as in OCAP mode. The code could be us
 
 [![CRAN](https://rforge.net/do/cransvg/RSclient)](https://cran.r-project.org/package=RSclient)
 [![RForge](https://rforge.net/do/versvg/RSclient)](https://RForge.net/RSclient)
+[![RSclient check](https://github.com/s-u/RSclient/actions/workflows/check.yml/badge.svg)](https://github.com/s-u/RSclient/actions/workflows/check.yml)
+
 
 To install the CRAN version, use simply
 
