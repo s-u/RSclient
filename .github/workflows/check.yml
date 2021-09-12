@@ -1,0 +1,23 @@
+on: [push, pull_request]
+
+name: R-CMD-Check
+
+jobs:
+  R-CMD-check:
+    runs-on: ${{ matrix.os }}
+
+    name: ${{ matrix.os }} check
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ 'windows-latest', 'macOS-10.15', 'ubuntu-20.04' ]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: s-u/R-actions/pkg-check@master
+        with:
+          debian-deps: libssl-dev
+          macos-deps: openssl-1.1.1h
+          check-flags: --as-cran
