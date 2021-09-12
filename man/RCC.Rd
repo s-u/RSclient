@@ -19,14 +19,14 @@
 \alias{RS.server.source}
 \usage{
 RS.connect(host = NULL, port = 6311L, tls = FALSE, verify = TRUE,
-           proxy.target = NULL, proxy.wait = TRUE)
+           proxy.target = NULL, proxy.wait = TRUE, chain, key, ca)
 RS.login(rsc, user, password, pubkey, authkey)
 RS.eval(rsc, x, wait = TRUE, lazy = TRUE)
 RS.eval.qap(rsc, x, wait = TRUE)
 RS.collect(rsc, timeout = Inf, detail = FALSE, qap = FALSE)
 RS.close(rsc)
 RS.assign(rsc, name, value, wait = TRUE)
-RS.switch(rsc, protocol = "TLS", verify = TRUE)
+RS.switch(rsc, protocol = "TLS", verify = TRUE, chain, key, ca)
 RS.authkey(rsc, type = "rsa-authkey")
 RS.server.eval(rsc, text)
 RS.server.source(rsc, filename)
@@ -55,6 +55,17 @@ RS.oobCallbacks(rsc, send, msg)
   \item{verify}{logical, if \code{FALSE} no verification of the server
     certificate is done, otherwise the certificate is verified and the
     function will fail with an error if it is not valid.}
+  \item{chain}{string, optional, path to a file in PEM format that contains
+    client certificate and its chain. The client certificate must be
+    first in the chain.}
+  \item{key}{string, optional, path to a file in PEM format containing
+    the private key for the client certificate. If a client certificate
+    is necessary for the connection, both \code{chain} and \code{key}
+    must be set.}
+  \item{ca}{string, optional, path to a file holding any additional
+    certificate authority (CA) certificates (including intermediate
+    certificates) in PEM format that are required for the verification
+    of the server certificate. Only relevant if \code{verify=TRUE}.}
   \item{proxy.target}{proxy target (string) in the form \code{<host>:<port>}
     to be used when connecting to a non-transparent proxy that requires
     target designation. Not used when connected to transparent proxies

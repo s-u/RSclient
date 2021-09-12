@@ -1,10 +1,19 @@
-RS.connect <- function(host=NULL, port=6311L, tls=FALSE, verify=TRUE, proxy.target=NULL, proxy.wait=TRUE) .Call(RS_connect, host, port, tls, proxy.target, proxy.wait, verify)
+RS.connect <- function(host=NULL, port=6311L, tls=FALSE, verify=TRUE, proxy.target=NULL, proxy.wait=TRUE, chain, key, ca) {
+    chain <- if (missing(chain)) NULL else path.expand(chain)
+    key   <- if (missing(key)) NULL else path.expand(key)
+    ca    <- if (missing(ca)) NULL else path.expand(ca)
+    .Call(RS_connect, host, port, tls, proxy.target, proxy.wait, verify, chain, key, ca)
+}
 
 RS.close <- function(rsc) .Call(RS_close, rsc)
 
-RS.eval <- function(rsc, x, wait=TRUE, lazy=TRUE) { r <- .Call(RS_eval, rsc, serialize(if (isTRUE(lazy)) substitute(x) else x, NULL, FALSE), wait); if (is.raw(r)) unserialize(r) else r }
+RS.eval <- function(rsc, x, wait=TRUE, lazy=TRUE) {
+    r <- .Call(RS_eval, rsc, serialize(if (isTRUE(lazy)) substitute(x) else x, NULL, FALSE), wait)
+    if (is.raw(r)) unserialize(r) else r
+}
 
-RS.eval.qap <- function(rsc, x, wait=TRUE) .Call(RS_eval_qap, rsc, x, wait)
+RS.eval.qap <- function(rsc, x, wait=TRUE)
+    .Call(RS_eval_qap, rsc, x, wait)
 
 RS.collect <- function(rsc, timeout = Inf, detail = FALSE, qap = FALSE) {
     r <- .Call(RS_collect, rsc, timeout)
@@ -26,7 +35,12 @@ RS.server.source <- function(rsc, filename) .Call(RS_ctrl_str, rsc, 0x45L, filen
 
 RS.server.shutdown <- function(rsc) .Call(RS_ctrl_str, rsc, 0x44L, "")
 
-RS.switch <- function(rsc, protocol="TLS", verify=TRUE) .Call(RS_switch, rsc, protocol, verify)
+RS.switch <- function(rsc, protocol="TLS", verify=TRUE, chain, key, ca) {
+    chain <- if (missing(chain)) NULL else path.expand(chain)
+    key   <- if (missing(key)) NULL else path.expand(key)
+    ca    <- if (missing(ca)) NULL else path.expand(ca)
+    .Call(RS_switch, rsc, protocol, verify)
+}
 
 RS.authkey <- function(rsc, type="rsa-authkey") .Call(RS_authkey, rsc, type)
 

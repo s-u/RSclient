@@ -177,13 +177,25 @@ static void init_tls() {
     }
 }
 
-static int tls_upgrade(rsconn_t *c, int verify) {
+static int tls_upgrade(rsconn_t *c, int verify, const char *chain, const char *key, const char *ca) {
     SSL *ssl;
     SSL_CTX *ctx;
     if (first_tls)
 	init_tls();
     ctx = SSL_CTX_new(SSLv23_client_method());
     SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
+    if (chain && SSL_CTX_use_certificate_chain_file(ctx, chain) != 1) {
+	Rf_warning("Cannot load certificate chain from file %s", chain);
+	return -1;
+    }
+    if (key && SSL_CTX_use_PrivateKey_file(ctx, key, SSL_FILETYPE_PEM) != 1) {
+	Rf_warning("Cannot load certificate key from file %s", key);
+	return -1;
+    }
+    if (ca && SSL_CTX_load_verify_locations(ctx, ca, 0) != 1) {
+	Rf_warning("Cannot load CA certificates from file %s", chain);
+	return -1;
+    }
     SSL_CTX_set_verify(ctx, (verify == 0) ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, 0);
     c->tls = ssl = SSL_new(ctx);
     c->send = tls_send;
@@ -463,7 +475,8 @@ static void rsconn_fin(SEXP what) {
     if (c) rsc_close(c);
 }
 
-SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget, SEXP sProxyWait, SEXP sVerify) {
+SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget, SEXP sProxyWait, SEXP sVerify,
+		SEXP sChainFile, SEXP sKeyFile, SEXP sCAFile) {
     int port = asInteger(sPort), use_tls = (asInteger(useTLS) == 1), px_get_slot = (asInteger(sProxyWait) == 0), n;
     const char *host;
     char idstr[32];
@@ -493,12 +506,17 @@ SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget, SEXP sPr
     if (!c)
 	Rf_error("cannot connect to %s:%d", host, port);
 #ifdef USE_TLS
-    if (use_tls && (n = tls_upgrade(c, asInteger(sVerify))) != 1) {
-	int serr = SSL_get_error((SSL*)c->tls, n);
-	unsigned long err = ERR_get_error();
-	const char *es = ERR_error_string(err, 0);
-	rsc_close(c);
-	Rf_error("TLS handshake failed (SSL_error=%d; %s)", serr, es);
+    if (use_tls) {
+	const char *chain = ((TYPEOF(sChainFile) == STRSXP) && LENGTH(sChainFile) > 0) ? CHAR(STRING_ELT(sChainFile, 0)) : 0;
+	const char *key = ((TYPEOF(sKeyFile) == STRSXP) && LENGTH(sKeyFile) > 0) ? CHAR(STRING_ELT(sKeyFile, 0)) : 0;
+	const char *ca = ((TYPEOF(sCAFile) == STRSXP) && LENGTH(sCAFile) > 0) ? CHAR(STRING_ELT(sCAFile, 0)) : 0;
+	if ((n = tls_upgrade(c, asInteger(sVerify), chain, key, ca)) != 1) {
+	    int serr = SSL_get_error((SSL*)c->tls, n);
+	    unsigned long err = ERR_get_error();
+	    const char *es = ERR_error_string(err, 0);
+	    rsc_close(c);
+	    Rf_error("TLS handshake failed (SSL_error=%d; %s)", serr, es);
+	}
     }
 #endif	
     if (rsc_read(c, idstr, 32) != 32) {
@@ -1049,13 +1067,17 @@ SEXP RS_ctrl_str(SEXP sc, SEXP sCmd, SEXP sPayload) {
     return ScalarLogical(TRUE);
 }
 
-SEXP RS_switch(SEXP sc, SEXP prot, SEXP sVerify) {
+SEXP RS_switch(SEXP sc, SEXP prot, SEXP sVerify, SEXP sChainFile, SEXP sKeyFile, SEXP sCAFile) {
     rsconn_t *c;
 
     if (!inherits(sc, "RserveConnection")) Rf_error("invalid connection");
     c = (rsconn_t*) EXTPTR_PTR(sc);
     if (!c) Rf_error("invalid NULL connection");
     if (c->in_cmd) Rf_error("uncollected result from previous command, remove first");
+    const char *chain = ((TYPEOF(sChainFile) == STRSXP) && LENGTH(sChainFile) > 0) ? CHAR(STRING_ELT(sChainFile, 0)) : 0;
+    const char *key = ((TYPEOF(sKeyFile) == STRSXP) && LENGTH(sKeyFile) > 0) ? CHAR(STRING_ELT(sKeyFile, 0)) : 0
+;
+    const char *ca = ((TYPEOF(sCAFile) == STRSXP) && LENGTH(sCAFile) > 0) ? CHAR(STRING_ELT(sCAFile, 0)) : 0;
     if (TYPEOF(prot) != STRSXP || LENGTH(prot) != 1)
 	Rf_error("invalid protocol specification");
 #ifdef USE_TLS
@@ -1075,7 +1097,7 @@ SEXP RS_switch(SEXP sc, SEXP prot, SEXP sVerify) {
 	tl = get_hdr(sc, c, &hdr);
 	if (tl)
 	    rsc_slurp(c, tl);
-	if (tls_upgrade(c, asInteger(sVerify)) != 1) {
+	if (tls_upgrade(c, asInteger(sVerify), chain, key, ca) != 1) {
 	    RS_close(sc);
 	    Rf_error("TLS negotitation failed");
 	}
