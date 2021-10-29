@@ -276,7 +276,7 @@ static rsconn_t *rsc_connect_ex(const char *host, int port, rsconn_t *c) {
 	struct timeval tv;
 	tv.tv_sec  = 0;
 	tv.tv_usec = 200000; /* 200ms */
-	setsockopt(c->s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+	setsockopt(c->s, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tv, sizeof(tv));
     }
 #endif
     if (c->s != -1 && !connected) {
