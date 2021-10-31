@@ -1,3 +1,7 @@
+0.7-6	2021-10-31
+   o	remove configure.win and rely on OpenSSL being part
+	of the toolchain
+
 0.7-5	2021-09-12
    o	support long vectors when encoding (needed for R 3.5.0+)
 
