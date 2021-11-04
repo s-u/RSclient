@@ -1,10 +1,9 @@
 #ifndef QAP_H__
 #define QAP_H__
 
-#ifndef USE_RINTERNALS
-#define USE_RINTERNALS 1
+
 #include <Rinternals.h>
-#endif
+
 #define RSERVE_PKG 1
 
 #include "RSprotocol.h"
@@ -21,8 +20,19 @@
 #define itop(X) ptoi(X)
 #endif
 #define fixdcpy(A, B) memcpy(A, B, 8)
-typedef unsigned long rlen_t;
 
+/* does this R have R_xlen_t ? */
+#ifdef R_XLEN_T_MAX
+typedef R_xlen_t rlen_t;
+/* we cannot use R_XLEN_T_MAX since that is 2^52 for 64-bit */
+#ifdef LONG_VECTOR_SUPPORT
+#define rlen_max ((rlen_t) 0xffffffffffffffff)
+#else
+#define rlen_max ((rlen_t) 0xffffffff)
+#endif
+#else
+/* legacy compatibility to use unsigned long */
+typedef unsigned long rlen_t;
 #ifdef ULONG_MAX
 #define rlen_max ULONG_MAX
 #else
@@ -32,6 +42,7 @@ typedef unsigned long rlen_t;
 #define rlen_max 0xffffffffL
 #endif /* __LP64__ */
 #endif /* ULONG_MAX */
+#endif /* R_XLEN_T_MAX */
 
 SEXP QAP_decode(unsigned int **buf);
 rlen_t QAP_getStorageSize(SEXP x);

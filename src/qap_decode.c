@@ -29,7 +29,7 @@ SEXP decode_to_SEXP(unsigned int **buf)
     SEXP val = 0, vatt = 0;
     int ty = PAR_TYPE(ptoi(*b));
     rlen_t ln = PAR_LEN(ptoi(*b));
-    R_len_t i, l;
+    rlen_t i, l;
     
     if (IS_LARGE(ty)) {
 	ty ^= XT_LARGE;
@@ -176,7 +176,7 @@ SEXP decode_to_SEXP(unsigned int **buf)
     case XT_VECTOR_EXP:
 	{
 	    unsigned char *ie = (unsigned char*) b + ln;
-	    R_len_t n = 0;
+	    rlen_t n = 0;
 	    SEXP lh = R_NilValue;
 	    SEXP vr = allocVector(VECSXP, 1);
 	    *buf = b;
