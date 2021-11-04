@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "qap.h"
+#include "qap_encode.h"
 #include <Rversion.h>
 
 /* compatibility re-mapping */
