@@ -1,3 +1,7 @@
+0.7-8	2022-03-08
+   o	support Windows UCRT
+
+
 0.7-7	2021-11-05
    o	improve long vector support and get ready for R-devel
 
