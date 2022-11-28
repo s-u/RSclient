@@ -45,6 +45,12 @@ static int wsock_up = 0;
 #endif
 
 #ifdef USE_TLS
+
+/* OpenSSL 3.x requires this */
+#ifndef OPENSSL_SUPPRESS_DEPRECATED
+#define OPENSSL_SUPPRESS_DEPRECATED 1
+#endif
+
 #include <openssl/rsa.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
