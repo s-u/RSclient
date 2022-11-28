@@ -481,6 +481,12 @@ static void rsconn_fin(SEXP what) {
     if (c) rsc_close(c);
 }
 
+static void setAttrib_(SEXP x, const char *sym, SEXP sVal) {
+    PROTECT(sVal);
+    Rf_setAttrib(x, Rf_install(sym), sVal);
+    UNPROTECT(1);
+}
+
 SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget, SEXP sProxyWait, SEXP sVerify,
 		SEXP sChainFile, SEXP sKeyFile, SEXP sCAFile) {
     int port = asInteger(sPort), use_tls = (asInteger(useTLS) == 1), px_get_slot = (asInteger(sProxyWait) == 0), n;
@@ -600,7 +606,7 @@ SEXP RS_connect(SEXP sHost, SEXP sPort, SEXP useTLS, SEXP sProxyTarget, SEXP sPr
     setAttrib(res, R_ClassSymbol, mkString("RserveConnection"));
     R_RegisterCFinalizer(res, rsconn_fin);
     if (caps != R_NilValue) {
-	setAttrib(res, install("capabilities"), caps);
+	setAttrib_(res, "capabilities", caps);
 	UNPROTECT(1);
     }	  
     UNPROTECT(1);
@@ -837,7 +843,7 @@ SEXP RS_eval_qap(SEXP sc, SEXP what, SEXP sWait) {
     {
 	struct phdr rhdr;
 	long pl   = QAP_getStorageSize(what), tl;
-	SEXP outv = allocVector(RAWSXP, pl);
+	SEXP outv = PROTECT(allocVector(RAWSXP, pl));
 	int isx   = pl > 0x7fffff;
 	unsigned int *oh = (unsigned int*) RAW(outv);
 	unsigned int *ot = QAP_storeSEXP(oh + (isx ? 2 : 1), what, pl);
@@ -858,13 +864,15 @@ SEXP RS_eval_qap(SEXP sc, SEXP what, SEXP sWait) {
 	rsc_write(c, &rhdr, sizeof(rhdr));
 	if (pl) rsc_write(c, RAW(outv), pl);
 	rsc_flush(c);
+	UNPROTECT(1); /* outv */
+	outv = 0;
 
 	if (async) {
 	    c->in_cmd++;
 	    return R_NilValue;
 	}
 	tl = get_hdr(sc, c, &rhdr);
-	res = allocVector(RAWSXP, tl);
+	res = PROTECT(allocVector(RAWSXP, tl));
 	if (rsc_read(c, RAW(res), tl) != tl) {
 	    RS_close(sc);
 	    Rf_error("read error reading payload of the eval result");
@@ -876,12 +884,11 @@ SEXP RS_eval_qap(SEXP sc, SEXP what, SEXP sWait) {
 	    if (par_type != DT_SEXP)
 		Rf_error("invalid result type coming from eval");
 	    ibuf += is_large + 1;
-	    PROTECT(res);
 	    res = QAP_decode(&ibuf);
-	    UNPROTECT(1);
 	}
+	UNPROTECT(1);
     }
-    
+
     return res;
 }
 
@@ -909,11 +916,12 @@ SEXP RS_eval(SEXP sc, SEXP what, SEXP sWait) {
 	return R_NilValue;
     }
     tl = get_hdr(sc, c, &hdr);
-    res = allocVector(RAWSXP, tl);
+    res = PROTECT(allocVector(RAWSXP, tl));
     if (rsc_read(c, RAW(res), tl) != tl) {
 	RS_close(sc);
 	Rf_error("read error reading payload of the eval result");
     }
+    UNPROTECT(1);
     return res;
 }
 
@@ -973,8 +981,8 @@ SEXP RS_collect(SEXP sc, SEXP s_timeout) {
 	/* both sc and c are set to the node and the structure */
 	tl = get_hdr(sc, c, &hdr);
 	res = PROTECT(allocVector(RAWSXP, tl));
-	setAttrib(res, install("rsc"), sc);
-	if (rdy >= 0) setAttrib(res, install("index"), ScalarInteger(rdy + 1));
+	setAttrib_(res, "rsc", sc);
+	if (rdy >= 0) setAttrib_(res, "index", ScalarInteger(rdy + 1));
 	if (rsc_read(c, RAW(res), tl) != tl) {
 	    RS_close(sc);
 	    Rf_error("read error reading payload of the eval result");
@@ -1020,11 +1028,12 @@ SEXP RS_assign(SEXP sc, SEXP what, SEXP sWait) {
 	return R_NilValue;
     }
     tl = get_hdr(sc, c, &hdr);
-    res = allocVector(RAWSXP, tl);
+    res = PROTECT(allocVector(RAWSXP, tl));
     if (rsc_read(c, RAW(res), tl) != tl) {
 	RS_close(sc);
 	Rf_error("read error reading payload of the eval result");
     }
+    UNPROTECT(1);
     return res;
 }
 
@@ -1141,11 +1150,12 @@ SEXP RS_authkey(SEXP sc, SEXP type) {
     rsc_write(c, key_type, strlen(key_type) + 1);
     rsc_flush(c);
     tl = get_hdr(sc, c, &hdr);
-    res = allocVector(RAWSXP, tl);
+    res = PROTECT(allocVector(RAWSXP, tl));
     if (rsc_read(c, RAW(res), tl) != tl ) {
 	RS_close(sc);
 	Rf_error("read error loading key payload");
     }
+    UNPROTECT(1);
     return res;
 }
 
