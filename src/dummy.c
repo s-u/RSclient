@@ -2,8 +2,8 @@
    (this package uses NAMESPACE C-level symbol registration
    but the checks don't get that) */
 
-extern void R_registerRoutines();
-extern void R_useDynamicSymbols();
+extern void R_registerRoutines(void);
+extern void R_useDynamicSymbols(void);
 
 void dummy() {
     R_registerRoutines();
