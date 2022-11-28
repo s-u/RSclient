@@ -780,6 +780,8 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 	    /* FIXME: we assume that we get encoded SEXP - we should check ... */
 	    ibuf += 1;
 	    res = QAP_decode(&ibuf);
+	    UNPROTECT(1); /* original RAW res */
+	    PROTECT(res); /* result */
 
 	    /* FIXME: Rserve has a bug(?) that sets CMD_RESP on OOB commands so we clear it for now ... */
 	    hdr->cmd &= ~CMD_RESP;
@@ -791,12 +793,12 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 #ifdef RC_DEBUG
 	    Rprintf(" - OOB %x %s (%d) %d\n", hdr->cmd, IS_OOB_SEND(hdr->cmd) ? "send" : "other", OOB_USR_CODE(hdr->cmd), (int) tl);
 #endif
-	    if (ee != R_NilValue) {
+	    if (ee != R_NilValue) { /* OOB send or msg - we ignore anything else */
 		res = eval(ee, R_GlobalEnv);
 		if (IS_OOB_MSG(hdr->cmd)) {
 		    struct phdr rhdr;
 		    long pl = QAP_getStorageSize(res);
-		    SEXP outv = allocVector(RAWSXP, pl);
+		    SEXP outv = PROTECT(allocVector(RAWSXP, pl));
 		    int isx = pl > 0x7fffff;
 		    unsigned int *oh = (unsigned int*) RAW(outv);
 		    unsigned int *ot = QAP_storeSEXP(oh + (isx ? 2 : 1), res, pl);
@@ -814,10 +816,11 @@ static long get_hdr(SEXP sc, rsconn_t *c, struct phdr *hdr) {
 		    rsc_write(c, &rhdr, sizeof(rhdr));
 		    if (pl) rsc_write(c, RAW(outv), pl);
 		    rsc_flush(c);
+		    UNPROTECT(1); /* outv */
 		}
-		UNPROTECT(1);
+		UNPROTECT(1); /* ee */
 	    }
-	    UNPROTECT(1);
+	    UNPROTECT(1); /* res */
 	    continue;
 	}
 	break;
