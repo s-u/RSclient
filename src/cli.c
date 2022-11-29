@@ -175,7 +175,7 @@ static int first_tls = 1;
 
 #include <openssl/err.h>
 
-static void init_tls() {
+static void init_tls(void) {
     if (first_tls) {
 	SSL_library_init();	
 	SSL_load_error_strings();
@@ -214,7 +214,7 @@ static int tls_upgrade(rsconn_t *c, int verify, const char *chain, const char *k
 
 /* we split alloc and connect so alloc can be done on the main thread
    and connect on a separate one */
-static rsconn_t *rsc_alloc() {
+static rsconn_t *rsc_alloc(void) {
     rsconn_t *c = (rsconn_t*) calloc(sizeof(rsconn_t), 1);
 #ifdef WIN32
     if (!wsock_up) {
