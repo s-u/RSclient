@@ -1297,9 +1297,9 @@ SEXP RS_print(SEXP sc) {
     if (!c)
 	Rprintf(" <NULL> **invalid** RserveConnection\n");
     else if (c->s == -1)
-	Rprintf(" Closed Rserve connection %p\n", c);
+	Rprintf(" Closed Rserve connection %p\n", (void*) c);
     else
-	Rprintf(" Rserve %s connection %p (socket %d, queue length %d)\n", c->tls ? "TLS/QAP1" : "QAP1", c, c->s, c->in_cmd);
+	Rprintf(" Rserve %s connection %p (socket %d, queue length %d)\n", c->tls ? "TLS/QAP1" : "QAP1", (void*) c, (int) c->s, (int) c->in_cmd);
     return sc;
 }
 
