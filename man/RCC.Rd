@@ -65,7 +65,10 @@ RS.oobCallbacks(rsc, send, msg)
   \item{ca}{string, optional, path to a file holding any additional
     certificate authority (CA) certificates (including intermediate
     certificates) in PEM format that are required for the verification
-    of the server certificate. Only relevant if \code{verify=TRUE}.}
+    of the server certificate. Only relevant if \code{verify=TRUE}.
+    If not set then it will be attempted to load the default trust
+    store of the underlying library (which typically includes trusted
+    root certificates).}
   \item{proxy.target}{proxy target (string) in the form \code{<host>:<port>}
     to be used when connecting to a non-transparent proxy that requires
     target designation. Not used when connected to transparent proxies
