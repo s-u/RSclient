@@ -1,5 +1,5 @@
 Package: RSclient
-Version: 0.7-10
+Version: 0.7-11
 Title: Client for Rserve
 Author: Simon Urbanek <Simon.Urbanek@r-project.org>
 Maintainer: Simon Urbanek <Simon.Urbanek@r-project.org>
