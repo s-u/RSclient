@@ -212,6 +212,9 @@ static int tls_upgrade(rsconn_t *c, int verify, const char *chain, const char *k
 	init_tls();
     ctx = SSL_CTX_new(SSLv23_client_method());
     SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L /* needs 1.1.0+ */
+    SSL_CTX_set_default_verify_paths(ctx);
+#endif
     if (chain && SSL_CTX_use_certificate_chain_file(ctx, chain) != 1) {
 	Rf_warning("Cannot load certificate chain from file %s", chain);
 	return -1;
