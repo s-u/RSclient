@@ -2,7 +2,6 @@
 #include <string.h>
 
 #include "qap_encode.h"
-#include <Rversion.h>
 
 /* compatibility re-mapping */
 #define getStorageSize QAP_getStorageSize

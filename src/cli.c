@@ -58,6 +58,7 @@ static int wsock_up = 0;
 
 #define USE_RINTERNALS
 #include <Rinternals.h>
+#include "rcompat.h"
 
 /* asynchronous connection status */
 #define ACS_CONNECTING    1

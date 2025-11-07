@@ -3,6 +3,7 @@
 
 
 #include <Rinternals.h>
+#include "rcompat.h"
 
 #define RSERVE_PKG 1
 
