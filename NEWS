@@ -1,6 +1,8 @@
-0.7-11
+0.7-11	2025-11-07
    o	use default openssl trust store when performing TLS
 	verification operations if no ca= argument was provided.
+
+   o	add compatibility wrappers for R 4.5.0 and higher API
 
 
 0.7-10	2023-11-28
