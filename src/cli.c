@@ -231,7 +231,6 @@ static int tls_upgrade(rsconn_t *c, int verify, const char *chain, const char *k
     }
     if (ca) {
 	struct stat st;
-	int sslerr = 0;
 	const char *capath = 0, *cafile = 0;
 	if (!stat(chain, &st) && (st.st_mode & S_IFDIR))
 	    capath = ca;
