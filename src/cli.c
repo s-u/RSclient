@@ -38,6 +38,7 @@ static int wsock_up = 0;
 #endif
 #include <unistd.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <errno.h>
 
 #ifdef USE_THREADS
@@ -211,6 +212,8 @@ static int tls_upgrade(rsconn_t *c, int verify, const char *chain, const char *k
     SSL_CTX *ctx;
     if (first_tls)
 	init_tls();
+    if ((key && !chain) || (!key && chain))
+	Rf_error("If the client certificate is to be presented then both the key and certificate chain must be provided.");
     ctx = SSL_CTX_new(SSLv23_client_method());
     SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L /* needs 1.1.0+ */
@@ -226,9 +229,18 @@ static int tls_upgrade(rsconn_t *c, int verify, const char *chain, const char *k
 	Rf_warning("Cannot load certificate key from file %s", key);
 	return -1;
     }
-    if (ca && SSL_CTX_load_verify_locations(ctx, ca, 0) != 1) {
-	Rf_warning("Cannot load CA certificates from file %s", chain);
-	return -1;
+    if (ca) {
+	struct stat st;
+	int sslerr = 0;
+	const char *capath = 0, *cafile = 0;
+	if (!stat(chain, &st) && (st.st_mode & S_IFDIR))
+	    capath = ca;
+	else
+	    cafile = ca;
+	if (SSL_CTX_load_verify_locations(ctx, cafile, capath) != 1) {
+	    Rf_warning("Cannot load CA certificates from %s", ca);
+	    return -1;
+	}
     }
     SSL_CTX_set_verify(ctx, (verify == 0) ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, verify_callback);
     c->tls = ssl = SSL_new(ctx);
