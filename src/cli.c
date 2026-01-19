@@ -1002,7 +1002,7 @@ SEXP RS_collect(SEXP sc, SEXP s_timeout) {
 	SEXP res;
 	struct phdr hdr;
 	long tl;
-	rsconn_t *c;
+	rsconn_t *c = 0; /* just to silence incompenent compilers */
 	int rdy = -1;
 	if (TYPEOF(sc) == EXTPTRSXP) /* there is only one so it must be us */
 	    c = (rsconn_t*) EXTPTR_PTR(sc);
