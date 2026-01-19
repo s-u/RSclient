@@ -2,6 +2,9 @@
    o	allow ca= to be a path to a directory instead a single
 	file (in RS.connect and RS.upgrade)
 
+   o	adapt to API changes in R 4.6.0
+
+
 0.7-11	2025-11-07
    o	use default openssl trust store when performing TLS
 	verification operations if no ca= argument was provided.
