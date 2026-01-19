@@ -62,7 +62,7 @@ RS.oobCallbacks(rsc, send, msg)
     the private key for the client certificate. If a client certificate
     is necessary for the connection, both \code{chain} and \code{key}
     must be set.}
-  \item{ca}{string, optional, path to a file holding any additional
+  \item{ca}{string, optional, path to a file or directory holding any additional
     certificate authority (CA) certificates (including intermediate
     certificates) in PEM format that are required for the verification
     of the server certificate. Only relevant if \code{verify=TRUE}.
